@@ -26,9 +26,36 @@ const memberChoices = document.querySelector("#memberChoices");
 const HOUR_START = 8;
 const HOUR_END = 22;
 const HOUR_LABEL_STEP = 2;
-const EVENT_COLORS = ["#d9e3de", "#fde2d6", "#f8bfcc", "#f1a0b0"];
+const EMPTY_EVENT_COLOR = "#d9d9d9";
+const EVENT_COLORS = [
+  "#ffd95c",
+  "#ff9f24",
+  "#ef4c4d",
+  "#df3d50",
+  "#7f962a",
+  "#f9c65b",
+  "#fffca8",
+  "#f28beb",
+  "#ed49df",
+  "#dca564",
+  "#e4c77f",
+  "#e6ddb0",
+  "#5a7d96",
+  "#e5f2bc",
+  "#f7de82",
+  "#bdca93",
+  "#f8eaa1",
+  "#d8eeee",
+  "#8da483",
+  "#eee8b1",
+  "#b05d76",
+  "#f7e4c9",
+  "#85d5d3",
+  "#6dca91",
+];
 const ACTIVE_PANEL_INDEX = 2;
 const membersInput = document.querySelector("#membersInput");
+const memberColorSettings = document.querySelector("#memberColorSettings");
 const languageSelect = document.querySelector("#languageSelect");
 const deleteEvent = document.querySelector("#deleteEvent");
 
@@ -386,11 +413,15 @@ const weekdayWords = {
 let events = loadJson(STORAGE_KEY, []);
 let members = loadJson(MEMBER_KEY, []);
 let settings = loadJson(SETTINGS_KEY, {});
+let memberColors = normalizeMemberColors(settings.memberColors, members);
 let language = supportedLanguage(settings.language || navigator.language);
 let viewMode = settings.viewMode === "month" ? "month" : "week";
 let anchorDate = settings.anchorDate
   ? parseDateKey(settings.anchorDate)
   : startOfWeek(new Date());
+let draftMembers = [];
+let draftMemberColors = {};
+let openDraftColorMember = "";
 let pressTimer = null;
 let pressStartedAt = 0;
 let recording = null;
@@ -494,15 +525,40 @@ eventForm.addEventListener("submit", (event) => {
 settingsForm.addEventListener("submit", (event) => {
   event.preventDefault();
   language = languageSelect.value;
-  members = membersInput.value
-    .split(",")
-    .map((name) => name.trim())
-    .filter(Boolean);
+  members = parseMemberInput(membersInput.value);
+  memberColors = normalizeMemberColors(draftMemberColors, members);
   saveJson(MEMBER_KEY, members);
   saveSettings();
   settingsDialog.close();
   applyLanguage();
   render();
+});
+
+membersInput.addEventListener("input", () => {
+  draftMembers = parseMemberInput(membersInput.value);
+  draftMemberColors = normalizeMemberColors(draftMemberColors, draftMembers);
+  if (!draftMembers.includes(openDraftColorMember)) openDraftColorMember = "";
+  renderSettingsMemberColors();
+});
+
+memberColorSettings.addEventListener("click", (event) => {
+  const colorButton = event.target.closest("[data-color]");
+  if (colorButton) {
+    const member = colorButton.dataset.member;
+    const color = colorButton.dataset.color;
+    if (!colorButton.disabled && member && color) {
+      draftMemberColors[member] = color;
+      openDraftColorMember = "";
+      renderSettingsMemberColors();
+    }
+    return;
+  }
+
+  const memberButton = event.target.closest("[data-member]");
+  if (!memberButton) return;
+  const member = memberButton.dataset.member;
+  openDraftColorMember = openDraftColorMember === member ? "" : member;
+  renderSettingsMemberColors();
 });
 
 speechText.addEventListener("input", () => {
@@ -741,7 +797,8 @@ function formatEventBarText(entry) {
 
 function eventBackground(entry) {
   const eventMembers = eventMemberNames(entry);
-  if (eventMembers.length <= 1) return memberColor(eventMembers[0]);
+  if (eventMembers.length === 0) return EMPTY_EVENT_COLOR;
+  if (eventMembers.length === 1) return memberColor(eventMembers[0]);
 
   const size = 100 / eventMembers.length;
   const stops = eventMembers.flatMap((name, index) => {
@@ -759,9 +816,55 @@ function eventMemberNames(entry) {
 }
 
 function memberColor(name) {
+  if (!name) return EMPTY_EVENT_COLOR;
+  if (memberColors[name]) return memberColors[name];
+
   const index = members.indexOf(name);
   const safeIndex = index >= 0 ? index : stableColorIndex(name);
   return EVENT_COLORS[safeIndex % EVENT_COLORS.length];
+}
+
+function normalizeMemberColors(rawColors, names) {
+  const source = rawColors && typeof rawColors === "object" ? rawColors : {};
+  const normalized = {};
+  const used = new Set();
+
+  names.forEach((name) => {
+    const saved = source[name];
+    if (isSelectableColor(saved) && !used.has(saved)) {
+      normalized[name] = saved;
+      used.add(saved);
+      return;
+    }
+
+    const color = availableMemberColor(used, name);
+    normalized[name] = color;
+    used.add(color);
+  });
+
+  return normalized;
+}
+
+function availableMemberColor(used, seed) {
+  const paletteColor = EVENT_COLORS.find((color) => !used.has(color));
+  if (paletteColor) return paletteColor;
+
+  let attempt = 0;
+  let color = "";
+  do {
+    color = generatedMemberColor(seed, attempt);
+    attempt += 1;
+  } while (used.has(color));
+  return color;
+}
+
+function generatedMemberColor(seed, offset) {
+  const hue = (stableColorIndex(`${seed}${offset}`) + offset * 137) % 360;
+  return `hsl(${hue} 58% 76%)`;
+}
+
+function isSelectableColor(color) {
+  return typeof color === "string" && EVENT_COLORS.includes(color);
 }
 
 function stableColorIndex(value) {
@@ -1099,8 +1202,77 @@ function formatTimeRange(entry) {
 function openSettings() {
   languageSelect.value = language;
   membersInput.value = members.join(", ");
+  draftMembers = [...members];
+  draftMemberColors = normalizeMemberColors(memberColors, draftMembers);
+  openDraftColorMember = "";
+  renderSettingsMemberColors();
   settingsDialog.showModal();
   membersInput.focus();
+}
+
+function renderSettingsMemberColors() {
+  memberColorSettings.innerHTML = "";
+  if (draftMembers.length === 0) return;
+
+  draftMembers.forEach((name) => {
+    const row = document.createElement("div");
+    row.className = "member-color-row";
+
+    const colorButton = document.createElement("button");
+    colorButton.type = "button";
+    colorButton.className = "member-color-button";
+    colorButton.dataset.member = name;
+    colorButton.style.backgroundColor = draftMemberColors[name];
+    colorButton.setAttribute("aria-label", `${label("members")} ${name}`);
+
+    const nameEl = document.createElement("span");
+    nameEl.className = "member-color-name";
+    nameEl.textContent = name;
+
+    row.append(colorButton, nameEl);
+
+    if (openDraftColorMember === name) {
+      const palette = document.createElement("div");
+      palette.className = "member-color-palette";
+
+      EVENT_COLORS.forEach((color) => {
+        const swatch = document.createElement("button");
+        swatch.type = "button";
+        swatch.className = "member-color-option";
+        swatch.dataset.member = name;
+        swatch.dataset.color = color;
+        swatch.style.backgroundColor = color;
+        swatch.disabled = colorUsedByOtherMember(color, name, draftMemberColors);
+        if (draftMemberColors[name] === color) {
+          swatch.classList.add("selected");
+          swatch.setAttribute("aria-current", "true");
+        }
+        swatch.setAttribute("aria-label", `${name} ${color}`);
+        palette.append(swatch);
+      });
+
+      row.append(palette);
+    }
+
+    memberColorSettings.append(row);
+  });
+}
+
+function colorUsedByOtherMember(color, member, colors) {
+  return Object.entries(colors).some(
+    ([name, assignedColor]) => name !== member && assignedColor === color,
+  );
+}
+
+function parseMemberInput(value) {
+  return [
+    ...new Set(
+      value
+        .split(",")
+        .map((name) => name.trim())
+        .filter(Boolean),
+    ),
+  ];
 }
 
 function renderMemberChoices(selected) {
@@ -1396,6 +1568,7 @@ function compareEvents(a, b) {
 function saveSettings() {
   saveJson(SETTINGS_KEY, {
     language,
+    memberColors,
     viewMode,
     anchorDate: toDateKey(anchorDate),
   });
