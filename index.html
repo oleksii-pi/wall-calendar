@@ -1,0 +1,94 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Family Calendar</title>
+    <link rel="icon" href="data:,">
+    <link rel="stylesheet" href="styles.css">
+  </head>
+  <body>
+    <main id="calendar" class="calendar" aria-live="polite"></main>
+
+    <button id="talkButton" class="talk-button" type="button" aria-label="Push to talk"></button>
+
+    <nav id="appMenu" class="app-menu" hidden>
+      <button id="addEventButton" type="button">Add</button>
+      <button id="monthViewButton" type="button">Month view</button>
+      <button id="settingsButton" type="button">Settings</button>
+    </nav>
+
+    <dialog id="eventDialog">
+      <form method="dialog" id="eventForm">
+        <h2 id="eventDialogTitle">New event</h2>
+        <input id="eventId" type="hidden">
+        <label>
+          <span id="speechLabel">Title</span>
+          <textarea id="speechText" rows="3" autocomplete="off" required></textarea>
+        </label>
+        <label>
+          <span id="dateLabel">Date</span>
+          <input id="eventDate" type="date" required>
+        </label>
+        <label class="inline-check">
+          <input id="eventAllDay" type="checkbox">
+          <span id="allDayLabel">Full day</span>
+        </label>
+        <div class="compact-grid time-grid">
+          <label>
+            <span id="timeLabel">Start</span>
+            <input id="eventTime" type="time" step="900">
+          </label>
+          <label>
+            <span id="endLabel">End</span>
+            <input id="eventEndTime" type="time" step="900">
+          </label>
+        </div>
+        <fieldset id="memberChoices">
+          <legend id="membersLegend">People</legend>
+        </fieldset>
+        <menu>
+          <button value="delete" type="button" id="deleteEvent">Delete</button>
+          <button value="cancel" type="button" id="cancelEvent">Cancel</button>
+          <button value="default" type="submit" id="saveEvent">Add</button>
+        </menu>
+      </form>
+    </dialog>
+
+    <dialog id="settingsDialog">
+      <form method="dialog" id="settingsForm">
+        <h2 id="settingsTitle">Settings</h2>
+        <label>
+          <span id="languageLabel">Language</span>
+          <select id="languageSelect">
+            <option value="de">Deutsch</option>
+            <option value="en">English</option>
+            <option value="uk">Українська</option>
+          </select>
+        </label>
+        <label>
+          <span id="membersInputLabel">Names, separated by comma</span>
+          <input id="membersInput" type="text" placeholder="Adult, child">
+        </label>
+        <p class="hint" id="settingsHint">Data stays in this browser.</p>
+        <menu>
+          <button value="cancel" type="button" id="cancelSettings">Cancel</button>
+          <button value="default" type="submit" id="saveSettings">Save</button>
+        </menu>
+      </form>
+    </dialog>
+
+    <dialog id="confirmDialog">
+      <form method="dialog" id="confirmForm">
+        <h2 id="confirmTitle">Delete event?</h2>
+        <p class="hint" id="confirmHint">This cannot be undone.</p>
+        <menu>
+          <button value="cancel" type="button" id="cancelDelete">Cancel</button>
+          <button value="delete" type="submit" id="confirmDelete">Delete</button>
+        </menu>
+      </form>
+    </dialog>
+
+    <script src="app.js"></script>
+  </body>
+</html>
