@@ -211,7 +211,7 @@ body {
   flex: 1;
   display: flex;
   flex-direction: column;
-  gap: 2px;
+  gap: 1px;
   min-height: 20px;
 }
 
@@ -241,7 +241,7 @@ body {
   min-width: 0;
   padding: 0;
   border: 0;
-  border-radius: 3px;
+  border-radius: 1px;
   background: var(--accent);
   color: var(--ink);
   font: inherit;
@@ -261,8 +261,8 @@ body {
 }
 
 .day-body-compact {
-  padding: 2px 3px;
-  gap: 2px;
+  padding: 1px 2px;
+  gap: 1px;
 }
 
 .day-body-compact .timeline {
