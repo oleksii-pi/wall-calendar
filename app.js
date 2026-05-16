@@ -27,6 +27,7 @@ const HOUR_START = 8;
 const HOUR_END = 22;
 const HOUR_LABEL_STEP = 2;
 const EVENT_COLORS = ["#d9e3de", "#fde2d6", "#f8bfcc", "#f1a0b0"];
+const ACTIVE_PANEL_INDEX = 2;
 const membersInput = document.querySelector("#membersInput");
 const languageSelect = document.querySelector("#languageSelect");
 const deleteEvent = document.querySelector("#deleteEvent");
@@ -936,10 +937,19 @@ function stopRecording() {
 
 function startDrag(event) {
   if (!usesSwipeTrack()) return;
+  if (event.pointerType === "mouse" && event.button !== 0) return;
   if (event.target.closest("button, input, select, textarea, dialog")) return;
   const track = calendar.querySelector(".calendar-track");
   if (!track) return;
-  drag = { id: event.pointerId, startX: event.clientX, deltaX: 0, track };
+  const panelWidth = getPanelWidth(track);
+  if (!panelWidth) return;
+  drag = {
+    id: event.pointerId,
+    startX: event.clientX,
+    deltaX: 0,
+    panelWidth,
+    track,
+  };
   calendar.setPointerCapture(event.pointerId);
   track.classList.remove("sliding");
 }
@@ -952,9 +962,10 @@ function moveDrag(event) {
     return;
   }
   drag.deltaX = event.clientX - drag.startX;
-  const width = window.innerWidth;
+  const width = getPanelWidth(drag.track) || drag.panelWidth;
   const clamped = Math.max(-width, Math.min(width, drag.deltaX));
-  drag.track.style.transform = `translateX(calc(-100vw + ${clamped}px))`;
+  setTrackOffset(drag.track, clamped, width);
+  if (event.cancelable) event.preventDefault();
 }
 
 function finishDrag(event) {
@@ -966,16 +977,16 @@ function finishDrag(event) {
   }
   const deltaX = drag.deltaX;
   const track = drag.track;
+  const panelWidth = getPanelWidth(track) || drag.panelWidth;
   drag = null;
-  const width = window.innerWidth;
-  const threshold = Math.min(160, width * 0.18);
+  const threshold = Math.min(160, panelWidth * 0.18);
   if (Math.abs(deltaX) < threshold) {
     snapTrack(track, 0);
     return;
   }
 
   const direction = deltaX < 0 ? 1 : -1;
-  const snapOffset = (-direction * width) / 2;
+  const snapOffset = -direction * panelWidth;
   snapTrack(track, snapOffset, () => {
     anchorDate =
       viewMode === "month"
@@ -993,7 +1004,7 @@ function cancelDrag() {
 }
 
 function usesSwipeTrack() {
-  return window.matchMedia("(min-width: 821px)").matches;
+  return true;
 }
 
 function resetTrack(track) {
@@ -1003,7 +1014,7 @@ function resetTrack(track) {
 
 function snapTrack(track, offset, done) {
   track.classList.add("sliding");
-  track.style.transform = `translateX(calc(-100vw + ${offset}px))`;
+  setTrackOffset(track, offset);
   window.setTimeout(() => {
     if (done) {
       done();
@@ -1012,6 +1023,15 @@ function snapTrack(track, offset, done) {
       track.style.transform = "";
     }
   }, 270);
+}
+
+function getPanelWidth(track) {
+  return track.querySelector(".calendar-panel")?.getBoundingClientRect().width;
+}
+
+function setTrackOffset(track, offset, panelWidth = getPanelWidth(track)) {
+  const base = -(panelWidth || window.innerWidth) * ACTIVE_PANEL_INDEX;
+  track.style.transform = `translate3d(${base + offset}px, 0, 0)`;
 }
 
 function openEventDialog(parsed) {
