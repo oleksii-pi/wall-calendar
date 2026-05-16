@@ -30,6 +30,9 @@ const HOUR_START = 8;
 const HOUR_END = 22;
 const HOUR_LABEL_STEP = 2;
 const TAP_MOVE_THRESHOLD = 10;
+const SWIPE_ANIMATION_MS = 650;
+const WEEK_CURRENT_WIDTH_RATIO = 2 / 3;
+const WEEK_PREVIEW_WIDTH_RATIO = 1 / 3;
 const EMPTY_EVENT_COLOR = "#d9d9d9";
 const EVENT_COLORS = [
   "#ffd95c",
@@ -450,6 +453,7 @@ calendar.addEventListener("pointermove", moveDrag);
 calendar.addEventListener("pointerup", finishDrag);
 calendar.addEventListener("pointercancel", cancelDrag);
 calendar.addEventListener("click", openNewEventFromClick);
+window.addEventListener("resize", refreshWeekTrackLayout);
 
 monthViewButton.addEventListener("click", () => {
   viewMode = viewMode === "month" ? "week" : "month";
@@ -612,11 +616,13 @@ function render() {
       offset >= 0 && offset <= 1
         ? "calendar-panel"
         : "calendar-panel calendar-panel-buffer";
+    panel.dataset.panelOffset = String(offset);
     panel.append(renderer(stepDate(base, offset)));
     track.append(panel);
   }
 
   calendar.append(track);
+  if (viewMode === "week") setWeekTrackProgress(track, 0);
 
   monthViewButton.textContent = label(
     viewMode === "month" ? "menuWeek" : "menuMonth",
@@ -1061,6 +1067,12 @@ function moveDrag(event) {
   }
   drag.deltaX = event.clientX - drag.startX;
   drag.deltaY = event.clientY - drag.startY;
+  if (viewMode === "week") {
+    const progress = weekProgressFromDelta(drag.deltaX);
+    setWeekTrackProgress(drag.track, progress);
+    if (event.cancelable) event.preventDefault();
+    return;
+  }
   const width = getPanelWidth(drag.track) || drag.panelWidth;
   const clamped = Math.max(-width, Math.min(width, drag.deltaX));
   setTrackOffset(drag.track, clamped, width);
@@ -1089,6 +1101,23 @@ function finishDrag(event) {
   }
 
   suppressNextCalendarClick();
+  if (viewMode === "week") {
+    const viewportWidth = getCalendarViewportWidth();
+    const threshold = Math.min(160, viewportWidth * 0.18);
+    if (Math.abs(deltaX) < threshold) {
+      snapWeekTrack(track, 0);
+      return;
+    }
+
+    const direction = deltaX < 0 ? 1 : -1;
+    snapWeekTrack(track, direction, () => {
+      anchorDate = addDays(anchorDate, direction * 7);
+      saveSettings();
+      render();
+    });
+    return;
+  }
+
   const threshold = Math.min(160, panelWidth * 0.18);
   if (Math.abs(deltaX) < threshold) {
     snapTrack(track, 0);
@@ -1110,7 +1139,13 @@ function finishDrag(event) {
 function cancelDrag() {
   const track = drag ? drag.track : null;
   drag = null;
-  if (track) snapTrack(track, 0);
+  if (track) {
+    if (viewMode === "week") {
+      snapWeekTrack(track, 0);
+    } else {
+      snapTrack(track, 0);
+    }
+  }
 }
 
 function usesSwipeTrack() {
@@ -1119,7 +1154,11 @@ function usesSwipeTrack() {
 
 function resetTrack(track) {
   track.classList.remove("sliding");
-  track.style.transform = "";
+  if (viewMode === "week") {
+    setWeekTrackProgress(track, 0);
+  } else {
+    track.style.transform = "";
+  }
 }
 
 function snapTrack(track, offset, done) {
@@ -1135,6 +1174,19 @@ function snapTrack(track, offset, done) {
   }, 270);
 }
 
+function snapWeekTrack(track, progress, done) {
+  track.classList.add("sliding");
+  setWeekTrackProgress(track, progress);
+  window.setTimeout(() => {
+    if (done) {
+      done();
+    } else {
+      track.classList.remove("sliding");
+      setWeekTrackProgress(track, 0);
+    }
+  }, SWIPE_ANIMATION_MS + 20);
+}
+
 function getPanelWidth(track) {
   return track.querySelector(".calendar-panel")?.getBoundingClientRect().width;
 }
@@ -1142,6 +1194,71 @@ function getPanelWidth(track) {
 function setTrackOffset(track, offset, panelWidth = getPanelWidth(track)) {
   const base = -(panelWidth || window.innerWidth) * ACTIVE_PANEL_INDEX;
   track.style.transform = `translate3d(${base + offset}px, 0, 0)`;
+}
+
+function weekProgressFromDelta(deltaX) {
+  const width = getCalendarViewportWidth();
+  const travel = width * WEEK_CURRENT_WIDTH_RATIO;
+  if (!travel) return 0;
+  return Math.max(-1, Math.min(1, -deltaX / travel));
+}
+
+function setWeekTrackProgress(track, rawProgress) {
+  const progress = Math.max(-1, Math.min(1, rawProgress));
+  const width = getCalendarViewportWidth();
+  const panels = [...track.querySelectorAll(".calendar-panel")];
+  const panelWidths = new Map();
+  const currentWidth = width * WEEK_CURRENT_WIDTH_RATIO;
+  const previewWidth = width * WEEK_PREVIEW_WIDTH_RATIO;
+  const widthDelta = currentWidth - previewWidth;
+
+  panels.forEach((panel) => {
+    const offset = Number(panel.dataset.panelOffset);
+    let panelWidth = previewWidth;
+    if (progress >= 0) {
+      if (offset === 0) panelWidth = currentWidth - widthDelta * progress;
+      if (offset === 1) panelWidth = previewWidth + widthDelta * progress;
+    } else {
+      const backProgress = -progress;
+      if (offset === -1) panelWidth = previewWidth + widthDelta * backProgress;
+      if (offset === 0) panelWidth = currentWidth - widthDelta * backProgress;
+    }
+
+    panel.style.flexBasis = `${panelWidth}px`;
+    panel.style.width = `${panelWidth}px`;
+    panel.classList.toggle("calendar-panel-current", panelWidth > previewWidth);
+    panel.classList.toggle("calendar-panel-preview", panelWidth <= previewWidth);
+    panelWidths.set(offset, panelWidth);
+  });
+
+  const activeLeft = panels.reduce((sum, panel) => {
+    const offset = Number(panel.dataset.panelOffset);
+    return offset < 0 ? sum + (panelWidths.get(offset) || 0) : sum;
+  }, 0);
+
+  let translate;
+  if (progress >= 0) {
+    const activeWidth = panelWidths.get(0) || previewWidth;
+    const nextLeft = activeLeft + activeWidth;
+    const targetNextLeft = (1 - progress) * currentWidth;
+    translate = targetNextLeft - nextLeft;
+  } else {
+    const backProgress = -progress;
+    const previousWidth = panelWidths.get(-1) || previewWidth;
+    translate = -activeLeft + previousWidth * backProgress;
+  }
+
+  track.style.transform = `translate3d(${translate}px, 0, 0)`;
+}
+
+function getCalendarViewportWidth() {
+  return calendar.getBoundingClientRect().width || window.innerWidth;
+}
+
+function refreshWeekTrackLayout() {
+  if (viewMode !== "week" || drag) return;
+  const track = calendar.querySelector(".calendar-track");
+  if (track) setWeekTrackProgress(track, 0);
 }
 
 function openNewEventFromClick(event) {

@@ -73,6 +73,16 @@ body {
   transition: transform 260ms cubic-bezier(0.2, 0.8, 0.2, 1);
 }
 
+.week-view .calendar-track.sliding {
+  transition-duration: 650ms;
+}
+
+.week-view .calendar-track.sliding .calendar-panel {
+  transition:
+    flex-basis 650ms cubic-bezier(0.2, 0.8, 0.2, 1),
+    width 650ms cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+
 .calendar-panel {
   flex: 0 0 50vw;
   display: flex;
@@ -222,6 +232,11 @@ body {
   width: 0;
   border-left: 1px solid var(--line);
   pointer-events: none;
+}
+
+.week-view .calendar-panel-preview .hour-labels,
+.week-view .calendar-panel-preview .hour-tick {
+  visibility: hidden;
 }
 
 .lane {
