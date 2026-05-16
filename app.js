@@ -15,6 +15,7 @@ const eventForm = document.querySelector("#eventForm");
 const settingsForm = document.querySelector("#settingsForm");
 const confirmForm = document.querySelector("#confirmForm");
 const eventDialogTitle = document.querySelector("#eventDialogTitle");
+const settingsTitle = document.querySelector("#settingsTitle");
 const eventId = document.querySelector("#eventId");
 const speechText = document.querySelector("#speechText");
 const titleDictateButton = document.querySelector("#titleDictateButton");
@@ -1290,7 +1291,7 @@ function openSettings() {
   openDraftColorMember = "";
   renderSettingsMemberColors();
   settingsDialog.showModal();
-  membersInput.focus();
+  settingsTitle.focus({ preventScroll: true });
 }
 
 function renderSettingsMemberColors() {
