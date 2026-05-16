@@ -30,7 +30,8 @@ const HOUR_START = 8;
 const HOUR_END = 22;
 const HOUR_LABEL_STEP = 2;
 const TAP_MOVE_THRESHOLD = 10;
-const SWIPE_ANIMATION_MS = 650;
+const SWIPE_ANIMATION_MS = 180;
+const WEEK_SWIPE_ANIMATION_MS = 280;
 const WEEK_CURRENT_WIDTH_RATIO = 2 / 3;
 const WEEK_PREVIEW_WIDTH_RATIO = 1 / 3;
 const EMPTY_EVENT_COLOR = "#d9d9d9";
@@ -432,6 +433,8 @@ let draftMemberColors = {};
 let openDraftColorMember = "";
 let titleRecording = null;
 let drag = null;
+let activeSnap = null;
+let snapSequence = 0;
 let pendingDeleteId = "";
 let suppressCalendarClick = false;
 
@@ -1130,6 +1133,7 @@ function startDrag(event) {
   if (!usesSwipeTrack()) return;
   if (event.pointerType === "mouse" && event.button !== 0) return;
   if (event.target.closest("button, input, select, textarea, dialog")) return;
+  completeActiveSnap();
   const track = calendar.querySelector(".calendar-track");
   if (!track) return;
   const panelWidth = getPanelWidth(track);
@@ -1254,27 +1258,53 @@ function resetTrack(track) {
 function snapTrack(track, offset, done) {
   track.classList.add("sliding");
   setTrackOffset(track, offset);
-  window.setTimeout(() => {
+  scheduleSnapCompletion(track, SWIPE_ANIMATION_MS, () => {
     if (done) {
       done();
     } else {
       track.classList.remove("sliding");
       track.style.transform = "";
     }
-  }, 270);
+  });
 }
 
 function snapWeekTrack(track, progress, done) {
   track.classList.add("sliding");
   setWeekTrackProgress(track, progress);
-  window.setTimeout(() => {
+  scheduleSnapCompletion(track, WEEK_SWIPE_ANIMATION_MS, () => {
     if (done) {
       done();
     } else {
       track.classList.remove("sliding");
       setWeekTrackProgress(track, 0);
     }
-  }, SWIPE_ANIMATION_MS + 20);
+  });
+}
+
+function scheduleSnapCompletion(track, duration, complete) {
+  const token = ++snapSequence;
+  if (activeSnap) completeActiveSnap();
+
+  const timeoutId = window.setTimeout(() => {
+    if (!activeSnap || activeSnap.token !== token) return;
+    activeSnap = null;
+    complete();
+  }, duration + 20);
+
+  activeSnap = {
+    token,
+    track,
+    timeoutId,
+    complete,
+  };
+}
+
+function completeActiveSnap() {
+  if (!activeSnap) return;
+  const snap = activeSnap;
+  activeSnap = null;
+  window.clearTimeout(snap.timeoutId);
+  snap.complete();
 }
 
 function getPanelWidth(track) {
@@ -1771,10 +1801,6 @@ function orderedWeekdays() {
   return [...t().weekdays.slice(1), t().weekdays[0]];
 }
 
-function monthName(index) {
-  return t().months[index];
-}
-
 function standaloneMonthName(index) {
   return t().standaloneMonths[index];
 }
@@ -1782,7 +1808,11 @@ function standaloneMonthName(index) {
 function formatRange(days) {
   const first = days[0];
   const last = days[days.length - 1];
-  return `${first.getDate()} ${monthName(first.getMonth())} - ${last.getDate()} ${monthName(last.getMonth())}`;
+  const firstMonth = standaloneMonthName(first.getMonth());
+  const lastMonth = standaloneMonthName(last.getMonth());
+  return first.getMonth() === last.getMonth()
+    ? firstMonth
+    : `${firstMonth} - ${lastMonth}`;
 }
 
 function normalize(value) {
