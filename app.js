@@ -423,9 +423,7 @@ let settings = loadJson(SETTINGS_KEY, {});
 let memberColors = normalizeMemberColors(settings.memberColors, members);
 let language = supportedLanguage(settings.language || navigator.language);
 let viewMode = settings.viewMode === "month" ? "month" : "week";
-let anchorDate = settings.anchorDate
-  ? parseDateKey(settings.anchorDate)
-  : startOfWeek(new Date());
+let anchorDate = new Date();
 let draftMembers = [];
 let draftMemberColors = {};
 let openDraftColorMember = "";
@@ -433,6 +431,8 @@ let titleRecording = null;
 let drag = null;
 let pendingDeleteId = "";
 let suppressCalendarClick = false;
+
+if (Object.prototype.hasOwnProperty.call(settings, "anchorDate")) saveSettings();
 
 applyLanguage();
 render();
@@ -579,7 +579,6 @@ speechText.addEventListener("input", () => {
     eventTime.value = parsed.time;
     eventEndTime.value = shiftTime(parsed.time, 60);
   }
-  renderMemberChoices(parsed.members);
 });
 
 eventTime.addEventListener("change", () => {
@@ -1011,7 +1010,6 @@ function startTitleDictation() {
       .trim();
     if (transcript) {
       speechText.value = transcript;
-      renderMemberChoices(parseSpeech(transcript).members);
     }
   };
 
@@ -1396,9 +1394,6 @@ function parseSpeech(raw) {
   const text = normalize(raw);
   const parsedDate = parseDate(text);
   const parsedTime = parseTime(text);
-  const parsedMembers = members.filter((member) =>
-    text.includes(normalize(member)),
-  );
   let title = raw.trim();
 
   for (const cleaner of titleCleaners()) {
@@ -1410,7 +1405,6 @@ function parseSpeech(raw) {
     date: parsedDate,
     time: parsedTime,
     title: title || label("untitled"),
-    members: parsedMembers,
   };
 }
 
@@ -1640,12 +1634,6 @@ function toDateKey(date) {
   return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
 }
 
-function parseDateKey(value) {
-  const [year, month, day] = value.split("-").map(Number);
-  if (!year || !month || !day) return startOfWeek(new Date());
-  return new Date(year, month - 1, day);
-}
-
 function compareEvents(a, b) {
   return `${a.date} ${a.time || "00:00"} ${a.title}`.localeCompare(
     `${b.date} ${b.time || "00:00"} ${b.title}`,
@@ -1657,7 +1645,6 @@ function saveSettings() {
     language,
     memberColors,
     viewMode,
-    anchorDate: toDateKey(anchorDate),
   });
 }
 
