@@ -439,6 +439,7 @@ if (Object.prototype.hasOwnProperty.call(settings, "anchorDate")) saveSettings()
 
 applyLanguage();
 render();
+window.setInterval(refreshCurrentTimeIndicators, 60 * 1000);
 
 talkButton.addEventListener("click", (event) => {
   event.preventDefault();
@@ -454,6 +455,9 @@ calendar.addEventListener("pointerup", finishDrag);
 calendar.addEventListener("pointercancel", cancelDrag);
 calendar.addEventListener("click", openNewEventFromClick);
 window.addEventListener("resize", refreshWeekTrackLayout);
+document.addEventListener("visibilitychange", () => {
+  if (!document.hidden) render();
+});
 
 monthViewButton.addEventListener("click", () => {
   viewMode = viewMode === "month" ? "week" : "month";
@@ -623,6 +627,7 @@ function render() {
 
   calendar.append(track);
   if (viewMode === "week") setWeekTrackProgress(track, 0);
+  refreshCurrentTimeIndicators();
 
   monthViewButton.textContent = label(
     viewMode === "month" ? "menuWeek" : "menuMonth",
@@ -662,7 +667,10 @@ function renderWeek(monday) {
     dateEl.className = "date";
     dateEl.innerHTML = `<span class="weekday">${t().weekdays[day.getDay()]}</span><span class="number">${day.getDate()}</span>`;
 
-    dayEl.append(dateEl, renderDayBody(dayEvents, { showHours: true }));
+    dayEl.append(
+      dateEl,
+      renderDayBody(dayEvents, { date: day, showHours: true }),
+    );
     week.append(dayEl);
   });
 
@@ -711,7 +719,14 @@ function renderMonth(monthDate) {
     number.className = "month-number";
     number.textContent = day.getDate();
 
-    dayEl.append(number, renderDayBody(dayEvents, { compact: true }));
+    dayEl.append(
+      number,
+      renderDayBody(dayEvents, {
+        compact: true,
+        date: day,
+        showCurrentTime: day.getMonth() === monthDate.getMonth(),
+      }),
+    );
     grid.append(dayEl);
   });
 
@@ -725,7 +740,9 @@ function renderDayBody(dayEvents, options = {}) {
 
   const allDay = dayEvents.filter(isAllDay);
   const timed = dayEvents.filter((entry) => !isAllDay(entry));
-  const hourRange = dayHourRange(timed);
+  const currentTimeMin = dayCurrentMinute(options);
+  const hourRange = dayHourRange(timed, currentTimeMin);
+  if (options.date) body.dataset.date = toDateKey(options.date);
   body.dataset.startMin = String(hourRange.startMin);
   body.dataset.endMin = String(hourRange.endMin);
 
@@ -788,10 +805,83 @@ function renderDayBody(dayEvents, options = {}) {
     lanesEl.append(laneEl);
   });
 
+  if (currentTimeMin !== null) {
+    const line = renderCurrentTimeLine(currentTimeMin, hourRange);
+    if (line) lanesEl.append(line);
+  }
+
   timeline.append(lanesEl);
   body.append(timeline);
 
   return body;
+}
+
+function dayCurrentMinute(options) {
+  if (!options.date || options.showCurrentTime === false) return null;
+  const now = new Date();
+  if (!sameDate(options.date, now)) return null;
+  return now.getHours() * 60 + now.getMinutes();
+}
+
+function renderCurrentTimeLine(minute, hourRange) {
+  if (minute < hourRange.startMin || minute > hourRange.endMin) return null;
+  const line = document.createElement("div");
+  line.className = "current-time-line";
+  line.style.left = `${currentTimePosition(minute, hourRange)}%`;
+  line.setAttribute("aria-hidden", "true");
+  return line;
+}
+
+function currentTimePosition(minute, hourRange) {
+  return ((minute - hourRange.startMin) / hourRange.rangeMin) * 100;
+}
+
+function refreshCurrentTimeIndicators() {
+  const now = new Date();
+  const todayKey = toDateKey(now);
+  const minute = now.getHours() * 60 + now.getMinutes();
+  let needsRender = false;
+
+  calendar.querySelectorAll(".current-time-line").forEach((line) => {
+    const body = line.closest(".day-body");
+    if (body?.dataset.date !== todayKey) {
+      line.remove();
+    }
+  });
+
+  const todayBodies = calendar.querySelectorAll(
+    ".day.today .day-body, .month-day.today:not(.outside) .day-body",
+  );
+
+  todayBodies.forEach((body) => {
+    const lanes = body.querySelector(".lanes");
+    const line = body.querySelector(".current-time-line");
+    const startMin = Number(body.dataset.startMin);
+    const endMin = Number(body.dataset.endMin);
+    if (
+      !lanes ||
+      !Number.isFinite(startMin) ||
+      !Number.isFinite(endMin) ||
+      endMin <= startMin
+    ) {
+      return;
+    }
+
+    if (minute < startMin || minute > endMin) {
+      needsRender = true;
+      return;
+    }
+
+    const position = ((minute - startMin) / (endMin - startMin)) * 100;
+    if (line) {
+      line.style.left = `${position}%`;
+      return;
+    }
+
+    needsRender = true;
+  });
+
+  if (needsRender && !drag) render();
 }
 
 function renderEventBar(entry, options = {}) {
