@@ -855,6 +855,7 @@ function stopRecording() {
 }
 
 function startDrag(event) {
+  if (!usesSwipeTrack()) return;
   if (event.target.closest("button, input, select, textarea, dialog")) return;
   const track = calendar.querySelector(".calendar-track");
   if (!track) return;
@@ -865,6 +866,11 @@ function startDrag(event) {
 
 function moveDrag(event) {
   if (!drag || drag.id !== event.pointerId) return;
+  if (!usesSwipeTrack()) {
+    resetTrack(drag.track);
+    drag = null;
+    return;
+  }
   drag.deltaX = event.clientX - drag.startX;
   const width = window.innerWidth;
   const clamped = Math.max(-width, Math.min(width, drag.deltaX));
@@ -873,6 +879,11 @@ function moveDrag(event) {
 
 function finishDrag(event) {
   if (!drag || drag.id !== event.pointerId) return;
+  if (!usesSwipeTrack()) {
+    resetTrack(drag.track);
+    drag = null;
+    return;
+  }
   const deltaX = drag.deltaX;
   const track = drag.track;
   drag = null;
@@ -899,6 +910,15 @@ function cancelDrag() {
   const track = drag ? drag.track : null;
   drag = null;
   if (track) snapTrack(track, 0);
+}
+
+function usesSwipeTrack() {
+  return window.matchMedia("(min-width: 821px)").matches;
+}
+
+function resetTrack(track) {
+  track.classList.remove("sliding");
+  track.style.transform = "";
 }
 
 function snapTrack(track, offset, done) {
