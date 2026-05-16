@@ -18,7 +18,6 @@ const eventDialogTitle = document.querySelector("#eventDialogTitle");
 const eventId = document.querySelector("#eventId");
 const speechText = document.querySelector("#speechText");
 const titleDictateButton = document.querySelector("#titleDictateButton");
-const titleEditButton = document.querySelector("#titleEditButton");
 const eventDate = document.querySelector("#eventDate");
 const eventTime = document.querySelector("#eventTime");
 const eventEndTime = document.querySelector("#eventEndTime");
@@ -126,7 +125,6 @@ const i18n = {
       settingsHint: "Daten bleiben nur in diesem Browser.",
       title: "Titel",
       dictateTitle: "Titel diktieren",
-      editTitle: "Titel bearbeiten",
       date: "Datum",
       time: "Beginn",
       end: "Ende",
@@ -208,7 +206,6 @@ const i18n = {
       settingsHint: "Data stays in this browser.",
       title: "Title",
       dictateTitle: "Dictate title",
-      editTitle: "Edit title",
       date: "Date",
       time: "Start",
       end: "End",
@@ -290,7 +287,6 @@ const i18n = {
       settingsHint: "Дані залишаються тільки в цьому браузері.",
       title: "Назва",
       dictateTitle: "Диктувати назву",
-      editTitle: "Редагувати назву",
       date: "Дата",
       time: "Початок",
       end: "Кінець",
@@ -446,7 +442,7 @@ talkButton.addEventListener("click", (event) => {
 });
 talkButton.addEventListener("contextmenu", (event) => event.preventDefault());
 titleDictateButton.addEventListener("click", startTitleDictation);
-titleEditButton.addEventListener("click", enableTitleEditing);
+speechText.addEventListener("pointerdown", enableTitleEditing);
 
 calendar.addEventListener("pointerdown", startDrag);
 calendar.addEventListener("pointermove", moveDrag);
@@ -583,10 +579,6 @@ speechText.addEventListener("input", () => {
     eventEndTime.value = shiftTime(parsed.time, 60);
   }
   renderMemberChoices(parsed.members);
-});
-
-speechText.addEventListener("focus", () => {
-  if (speechText.readOnly) speechText.blur();
 });
 
 eventTime.addEventListener("change", () => {
@@ -1530,8 +1522,6 @@ function applyLanguage() {
   talkButton.setAttribute("aria-label", label("push"));
   titleDictateButton.setAttribute("aria-label", label("dictateTitle"));
   titleDictateButton.title = label("dictateTitle");
-  titleEditButton.setAttribute("aria-label", label("editTitle"));
-  titleEditButton.title = label("editTitle");
   addEventButton.textContent = label("add");
   monthViewButton.textContent = label(
     viewMode === "month" ? "menuWeek" : "menuMonth",

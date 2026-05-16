@@ -410,11 +410,6 @@ h2:focus {
   outline: 0;
 }
 
-.title-tools {
-  display: flex;
-  gap: 8px;
-}
-
 .icon-button {
   width: 44px;
   height: 44px;
@@ -435,6 +430,28 @@ h2:focus {
   border-color: var(--danger);
   background: var(--danger);
   color: #fff;
+}
+
+.title-field {
+  display: grid;
+  gap: 6px;
+  min-width: 0;
+}
+
+.title-input-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 58px;
+  align-items: stretch;
+  gap: 8px;
+  min-width: 0;
+}
+
+.title-dictate-button {
+  align-self: stretch;
+  width: 58px;
+  height: auto;
+  min-height: 0;
+  padding: 0;
 }
 
 label,

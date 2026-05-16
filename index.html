@@ -22,25 +22,19 @@
       <form method="dialog" id="eventForm">
         <h2 id="eventDialogTitle" tabindex="-1">New event</h2>
         <input id="eventId" type="hidden">
-        <div class="title-tools" aria-label="Title tools">
-          <button id="titleDictateButton" class="icon-button" type="button" aria-label="Dictate title" title="Dictate title">
-            <svg viewBox="0 0 24 24" aria-hidden="true">
-              <path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3Z"></path>
-              <path d="M19 10v2a7 7 0 0 1-14 0v-2"></path>
-              <path d="M12 19v3"></path>
-            </svg>
-          </button>
-          <button id="titleEditButton" class="icon-button" type="button" aria-label="Edit title" title="Edit title">
-            <svg viewBox="0 0 24 24" aria-hidden="true">
-              <path d="M21.2 6.8 17.2 2.8a2.1 2.1 0 0 0-3 0L3 14v7h7L21.2 9.8a2.1 2.1 0 0 0 0-3Z"></path>
-              <path d="m12 5 7 7"></path>
-            </svg>
-          </button>
+        <div class="title-field">
+          <label id="speechLabel" for="speechText">Title</label>
+          <div class="title-input-row">
+            <textarea id="speechText" rows="3" autocomplete="off" required readonly></textarea>
+            <button id="titleDictateButton" class="icon-button title-dictate-button" type="button" aria-label="Dictate title" title="Dictate title">
+              <svg viewBox="0 0 24 24" aria-hidden="true">
+                <path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3Z"></path>
+                <path d="M19 10v2a7 7 0 0 1-14 0v-2"></path>
+                <path d="M12 19v3"></path>
+              </svg>
+            </button>
+          </div>
         </div>
-        <label>
-          <span id="speechLabel">Title</span>
-          <textarea id="speechText" rows="3" autocomplete="off" required readonly></textarea>
-        </label>
         <label>
           <span id="dateLabel">Date</span>
           <input id="eventDate" type="date" required>
