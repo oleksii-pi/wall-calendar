@@ -14,8 +14,11 @@ const confirmDialog = document.querySelector("#confirmDialog");
 const eventForm = document.querySelector("#eventForm");
 const settingsForm = document.querySelector("#settingsForm");
 const confirmForm = document.querySelector("#confirmForm");
+const eventDialogTitle = document.querySelector("#eventDialogTitle");
 const eventId = document.querySelector("#eventId");
 const speechText = document.querySelector("#speechText");
+const titleDictateButton = document.querySelector("#titleDictateButton");
+const titleEditButton = document.querySelector("#titleEditButton");
 const eventDate = document.querySelector("#eventDate");
 const eventTime = document.querySelector("#eventTime");
 const eventEndTime = document.querySelector("#eventEndTime");
@@ -26,6 +29,7 @@ const memberChoices = document.querySelector("#memberChoices");
 const HOUR_START = 8;
 const HOUR_END = 22;
 const HOUR_LABEL_STEP = 2;
+const TAP_MOVE_THRESHOLD = 10;
 const EMPTY_EVENT_COLOR = "#d9d9d9";
 const EVENT_COLORS = [
   "#ffd95c",
@@ -121,6 +125,8 @@ const i18n = {
       settings: "Einstellungen",
       settingsHint: "Daten bleiben nur in diesem Browser.",
       title: "Titel",
+      dictateTitle: "Titel diktieren",
+      editTitle: "Titel bearbeiten",
       date: "Datum",
       time: "Beginn",
       end: "Ende",
@@ -201,6 +207,8 @@ const i18n = {
       settings: "Settings",
       settingsHint: "Data stays in this browser.",
       title: "Title",
+      dictateTitle: "Dictate title",
+      editTitle: "Edit title",
       date: "Date",
       time: "Start",
       end: "End",
@@ -281,6 +289,8 @@ const i18n = {
       settings: "Налаштування",
       settingsHint: "Дані залишаються тільки в цьому браузері.",
       title: "Назва",
+      dictateTitle: "Диктувати назву",
+      editTitle: "Редагувати назву",
       date: "Дата",
       time: "Початок",
       end: "Кінець",
@@ -422,23 +432,27 @@ let anchorDate = settings.anchorDate
 let draftMembers = [];
 let draftMemberColors = {};
 let openDraftColorMember = "";
-let pressTimer = null;
-let pressStartedAt = 0;
-let recording = null;
+let titleRecording = null;
 let drag = null;
 let pendingDeleteId = "";
+let suppressCalendarClick = false;
 
 applyLanguage();
 render();
 
-talkButton.addEventListener("pointerdown", startButtonPress);
-talkButton.addEventListener("pointerup", finishButtonPress);
-talkButton.addEventListener("pointercancel", cancelButtonPress);
+talkButton.addEventListener("click", (event) => {
+  event.preventDefault();
+  appMenu.hidden = !appMenu.hidden;
+});
+talkButton.addEventListener("contextmenu", (event) => event.preventDefault());
+titleDictateButton.addEventListener("click", startTitleDictation);
+titleEditButton.addEventListener("click", enableTitleEditing);
 
 calendar.addEventListener("pointerdown", startDrag);
 calendar.addEventListener("pointermove", moveDrag);
 calendar.addEventListener("pointerup", finishDrag);
 calendar.addEventListener("pointercancel", cancelDrag);
+calendar.addEventListener("click", openNewEventFromClick);
 
 monthViewButton.addEventListener("click", () => {
   viewMode = viewMode === "month" ? "week" : "month";
@@ -571,6 +585,10 @@ speechText.addEventListener("input", () => {
   renderMemberChoices(parsed.members);
 });
 
+speechText.addEventListener("focus", () => {
+  if (speechText.readOnly) speechText.blur();
+});
+
 eventTime.addEventListener("change", () => {
   eventEndTime.value = eventTime.value ? shiftTime(eventTime.value, 60) : "";
 });
@@ -640,6 +658,7 @@ function renderWeek(monday) {
     ]
       .filter(Boolean)
       .join(" ");
+    dayEl.dataset.date = dateKey;
 
     const dateEl = document.createElement("div");
     dateEl.className = "date";
@@ -688,6 +707,7 @@ function renderMonth(monthDate) {
     ]
       .filter(Boolean)
       .join(" ");
+    dayEl.dataset.date = dateKey;
 
     const number = document.createElement("div");
     number.className = "month-number";
@@ -708,6 +728,8 @@ function renderDayBody(dayEvents, options = {}) {
   const allDay = dayEvents.filter(isAllDay);
   const timed = dayEvents.filter((entry) => !isAllDay(entry));
   const hourRange = dayHourRange(timed);
+  body.dataset.startMin = String(hourRange.startMin);
+  body.dataset.endMin = String(hourRange.endMin);
 
   if (allDay.length > 0) {
     const row = document.createElement("div");
@@ -967,75 +989,54 @@ function packLanes(entries, range) {
   return lanes;
 }
 
-function startButtonPress(event) {
-  event.preventDefault();
-  talkButton.setPointerCapture(event.pointerId);
-  pressStartedAt = Date.now();
-  pressTimer = window.setTimeout(startRecording, 1000);
-}
-
-function finishButtonPress() {
-  const wasRecording = Boolean(recording);
-  window.clearTimeout(pressTimer);
-  if (wasRecording) {
-    stopRecording();
+function startTitleDictation() {
+  if (titleRecording) {
+    titleRecording.stop();
     return;
   }
-  if (Date.now() - pressStartedAt < 1000) {
-    appMenu.hidden = !appMenu.hidden;
-  }
-}
 
-function cancelButtonPress() {
-  window.clearTimeout(pressTimer);
-  if (recording) stopRecording();
-}
-
-function startRecording() {
   const SpeechRecognition =
     window.SpeechRecognition || window.webkitSpeechRecognition;
   if (!SpeechRecognition) {
-    openEventDialog(parseSpeech(""));
+    enableTitleEditing();
     return;
   }
 
   const recognition = new SpeechRecognition();
-  const state = { recognition, transcript: "", finished: false };
-  recording = state;
+  let transcript = "";
+  titleRecording = recognition;
   recognition.lang = t().speechLang;
   recognition.interimResults = true;
-  recognition.continuous = true;
-  talkButton.classList.add("listening");
-  appMenu.hidden = true;
+  recognition.continuous = false;
+  titleDictateButton.classList.add("listening");
+  speechText.readOnly = true;
 
   recognition.onresult = (event) => {
-    state.transcript = [...event.results]
+    transcript = [...event.results]
       .map((result) => result[0].transcript)
       .join(" ")
       .trim();
+    if (transcript) {
+      speechText.value = transcript;
+      renderMemberChoices(parseSpeech(transcript).members);
+    }
   };
 
-  recognition.onerror = () => {
-    state.finished = true;
-    recording = null;
-    talkButton.classList.remove("listening");
-    openEventDialog(parseSpeech(""));
-  };
-
-  recognition.onend = () => {
-    if (state.finished) return;
-    state.finished = true;
-    recording = null;
-    talkButton.classList.remove("listening");
-    openEventDialog(parseSpeech(state.transcript));
-  };
+  recognition.onerror = stopTitleDictation;
+  recognition.onend = stopTitleDictation;
 
   recognition.start();
 }
 
-function stopRecording() {
-  if (!recording) return;
-  recording.recognition.stop();
+function stopTitleDictation() {
+  titleRecording = null;
+  titleDictateButton.classList.remove("listening");
+}
+
+function enableTitleEditing() {
+  speechText.readOnly = false;
+  speechText.focus({ preventScroll: true });
+  speechText.setSelectionRange(speechText.value.length, speechText.value.length);
 }
 
 function startDrag(event) {
@@ -1049,9 +1050,12 @@ function startDrag(event) {
   drag = {
     id: event.pointerId,
     startX: event.clientX,
+    startY: event.clientY,
     deltaX: 0,
+    deltaY: 0,
     panelWidth,
     track,
+    newEvent: newEventFromPointer(event),
   };
   calendar.setPointerCapture(event.pointerId);
   track.classList.remove("sliding");
@@ -1065,6 +1069,7 @@ function moveDrag(event) {
     return;
   }
   drag.deltaX = event.clientX - drag.startX;
+  drag.deltaY = event.clientY - drag.startY;
   const width = getPanelWidth(drag.track) || drag.panelWidth;
   const clamped = Math.max(-width, Math.min(width, drag.deltaX));
   setTrackOffset(drag.track, clamped, width);
@@ -1079,9 +1084,20 @@ function finishDrag(event) {
     return;
   }
   const deltaX = drag.deltaX;
+  const deltaY = drag.deltaY;
   const track = drag.track;
   const panelWidth = getPanelWidth(track) || drag.panelWidth;
+  const newEvent = drag.newEvent;
   drag = null;
+  const movement = Math.hypot(deltaX, deltaY);
+  if (newEvent && movement < TAP_MOVE_THRESHOLD) {
+    resetTrack(track);
+    suppressNextCalendarClick();
+    openEventDialog(newEvent);
+    return;
+  }
+
+  suppressNextCalendarClick();
   const threshold = Math.min(160, panelWidth * 0.18);
   if (Math.abs(deltaX) < threshold) {
     snapTrack(track, 0);
@@ -1137,20 +1153,91 @@ function setTrackOffset(track, offset, panelWidth = getPanelWidth(track)) {
   track.style.transform = `translate3d(${base + offset}px, 0, 0)`;
 }
 
+function openNewEventFromClick(event) {
+  if (suppressCalendarClick) return;
+  if (event.target.closest("button, input, select, textarea, dialog")) return;
+  const parsed = newEventFromPoint(event.clientX, event.clientY, event.target);
+  if (!parsed) return;
+  event.preventDefault();
+  appMenu.hidden = true;
+  openEventDialog(parsed);
+}
+
+function suppressNextCalendarClick() {
+  suppressCalendarClick = true;
+  window.setTimeout(() => {
+    suppressCalendarClick = false;
+  }, 400);
+}
+
+function newEventFromPointer(event) {
+  return newEventFromPoint(event.clientX, event.clientY, event.target);
+}
+
+function newEventFromPoint(clientX, clientY, fallbackTarget) {
+  const pointTarget = document.elementFromPoint(clientX, clientY);
+  const dayEl =
+    pointTarget?.closest(".day, .month-day") ||
+    fallbackTarget?.closest(".day, .month-day");
+  if (!dayEl?.dataset.date) return null;
+
+  const parsed = {
+    raw: "",
+    date: dayEl.dataset.date,
+  };
+
+  if (viewMode === "week" && dayEl.classList.contains("day")) {
+    const time = timeFromWeekPoint(dayEl, clientX);
+    if (time) {
+      parsed.time = time;
+      parsed.endTime = shiftTime(time, 60);
+      parsed.allDay = false;
+    }
+  }
+
+  return parsed;
+}
+
+function timeFromWeekPoint(dayEl, clientX) {
+  const body = dayEl.querySelector(".day-body");
+  const lanes = dayEl.querySelector(".lanes");
+  if (!body || !lanes) return "";
+
+  const startMin = Number(body.dataset.startMin);
+  const endMin = Number(body.dataset.endMin);
+  if (!Number.isFinite(startMin) || !Number.isFinite(endMin) || endMin <= startMin)
+    return "";
+
+  const rect = lanes.getBoundingClientRect();
+  if (!rect.width) return "";
+  const percent = Math.max(0, Math.min(1, (clientX - rect.left) / rect.width));
+  const minute = roundToStep(startMin + percent * (endMin - startMin), 15);
+  return minutesToTime(Math.max(0, Math.min(23 * 60 + 45, minute)));
+}
+
+function roundToStep(minute, step) {
+  return Math.round(minute / step) * step;
+}
+
+function minutesToTime(minute) {
+  const normalized = ((minute % 1440) + 1440) % 1440;
+  return `${String(Math.floor(normalized / 60)).padStart(2, "0")}:${String(normalized % 60).padStart(2, "0")}`;
+}
+
 function openEventDialog(parsed) {
   eventId.value = "";
   deleteEvent.hidden = true;
-  document.querySelector("#eventDialogTitle").textContent = label("newEvent");
+  eventDialogTitle.textContent = label("newEvent");
   document.querySelector("#saveEvent").textContent = label("add");
   fillEventForm(parsed);
   eventDialog.showModal();
-  if (!speechText.value) speechText.focus();
+  eventDialogTitle.focus({ preventScroll: true });
 }
 
 function openExistingEvent(entry) {
   eventId.value = entry.id;
   deleteEvent.hidden = false;
-  document.querySelector("#eventDialogTitle").textContent = label("editEvent");
+  eventDialogTitle.textContent = label("editEvent");
   document.querySelector("#saveEvent").textContent = label("save");
   fillEventForm({
     raw: entry.title,
@@ -1162,9 +1249,13 @@ function openExistingEvent(entry) {
     members: entry.members || [],
   });
   eventDialog.showModal();
+  eventDialogTitle.focus({ preventScroll: true });
 }
 
 function fillEventForm(parsed) {
+  if (titleRecording) titleRecording.stop();
+  stopTitleDictation();
+  speechText.readOnly = true;
   speechText.value = parsed.raw ? parsed.title : "";
   eventDate.value = parsed.date || toDateKey(new Date());
   eventTime.value = parsed.time || "";
@@ -1275,7 +1366,8 @@ function parseMemberInput(value) {
   ];
 }
 
-function renderMemberChoices(selected) {
+function renderMemberChoices(selected = []) {
+  const selectedMembers = Array.isArray(selected) ? selected : [];
   memberChoices.innerHTML = "";
   const legend = document.createElement("legend");
   legend.textContent = label("members");
@@ -1296,7 +1388,7 @@ function renderMemberChoices(selected) {
     const input = document.createElement("input");
     input.type = "checkbox";
     input.value = name;
-    input.checked = selected.includes(name);
+    input.checked = selectedMembers.includes(name);
     const swatch = document.createElement("span");
     swatch.className = "member-swatch";
     swatch.style.backgroundColor = memberColor(name);
@@ -1436,12 +1528,16 @@ function applyLanguage() {
   document.documentElement.lang = t().htmlLang;
   talkButton.textContent = label("push");
   talkButton.setAttribute("aria-label", label("push"));
+  titleDictateButton.setAttribute("aria-label", label("dictateTitle"));
+  titleDictateButton.title = label("dictateTitle");
+  titleEditButton.setAttribute("aria-label", label("editTitle"));
+  titleEditButton.title = label("editTitle");
   addEventButton.textContent = label("add");
   monthViewButton.textContent = label(
     viewMode === "month" ? "menuWeek" : "menuMonth",
   );
   settingsButton.textContent = label("menuSettings");
-  document.querySelector("#eventDialogTitle").textContent = label("newEvent");
+  eventDialogTitle.textContent = label("newEvent");
   document.querySelector("#speechLabel").textContent = label("title");
   document.querySelector("#dateLabel").textContent = label("date");
   document.querySelector("#timeLabel").textContent = label("time");

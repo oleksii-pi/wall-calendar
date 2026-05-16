@@ -350,7 +350,7 @@ body {
   font-size: clamp(10px, 1.1vw, 14px);
   font-weight: 760;
   letter-spacing: 0;
-  touch-action: none;
+  touch-action: manipulation;
 }
 
 .talk-button.listening {
@@ -404,6 +404,37 @@ form {
 h2 {
   margin: 0;
   font-size: 22px;
+}
+
+h2:focus {
+  outline: 0;
+}
+
+.title-tools {
+  display: flex;
+  gap: 8px;
+}
+
+.icon-button {
+  width: 44px;
+  height: 44px;
+  padding: 0;
+}
+
+.icon-button svg {
+  width: 21px;
+  height: 21px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.icon-button.listening {
+  border-color: var(--danger);
+  background: var(--danger);
+  color: #fff;
 }
 
 label,
