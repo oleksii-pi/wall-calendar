@@ -25,8 +25,7 @@ const memberChoices = document.querySelector("#memberChoices");
 
 const HOUR_START = 8;
 const HOUR_END = 22;
-const HOUR_RANGE_MIN = (HOUR_END - HOUR_START) * 60;
-const HOUR_LABELS = [8, 10, 12, 14, 16, 18, 20, 22];
+const HOUR_LABEL_STEP = 2;
 const EVENT_COLORS = ["#d9e3de", "#fde2d6", "#f8bfcc", "#f1a0b0"];
 const membersInput = document.querySelector("#membersInput");
 const languageSelect = document.querySelector("#languageSelect");
@@ -648,10 +647,10 @@ function renderMonth(monthDate) {
 function renderDayBody(dayEvents, options = {}) {
   const body = document.createElement("div");
   body.className = options.compact ? "day-body day-body-compact" : "day-body";
-  const colorIndexes = new Map(dayEvents.map((entry, index) => [entry, index]));
 
   const allDay = dayEvents.filter(isAllDay);
   const timed = dayEvents.filter((entry) => !isAllDay(entry));
+  const hourRange = dayHourRange(timed);
 
   if (allDay.length > 0) {
     const row = document.createElement("div");
@@ -661,7 +660,6 @@ function renderDayBody(dayEvents, options = {}) {
         renderEventBar(entry, {
           fullDay: true,
           compact: options.compact,
-          colorIndex: colorIndexes.get(entry),
         }),
       ),
     );
@@ -674,12 +672,12 @@ function renderDayBody(dayEvents, options = {}) {
   if (options.showHours) {
     const labels = document.createElement("div");
     labels.className = "hour-labels";
-    for (const h of HOUR_LABELS) {
+    for (const h of hourRange.labels) {
       const label = document.createElement("span");
       label.className = "hour-label";
-      label.style.left = `${hourPosition(h)}%`;
-      if (h === HOUR_START) label.style.transform = "none";
-      if (h === HOUR_END) label.style.transform = "translateX(-100%)";
+      label.style.left = `${hourPosition(h, hourRange)}%`;
+      if (h === hourRange.startHour) label.style.transform = "none";
+      if (h === hourRange.endHour) label.style.transform = "translateX(-100%)";
       label.textContent = h;
       labels.append(label);
     }
@@ -689,26 +687,25 @@ function renderDayBody(dayEvents, options = {}) {
   const lanesEl = document.createElement("div");
   lanesEl.className = "lanes";
   if (options.showHours) {
-    for (const h of HOUR_LABELS) {
+    for (const h of hourRange.labels) {
       const tick = document.createElement("div");
       tick.className = "hour-tick";
-      tick.style.left = `${hourPosition(h)}%`;
+      tick.style.left = `${hourPosition(h, hourRange)}%`;
       lanesEl.append(tick);
     }
   }
 
-  packLanes(timed).forEach((lane) => {
+  packLanes(timed, hourRange).forEach((lane) => {
     const laneEl = document.createElement("div");
     laneEl.className = "lane";
     lane.forEach((entry) => {
       const bar = renderEventBar(entry, {
         compact: options.compact,
-        colorIndex: colorIndexes.get(entry),
       });
-      const s = clampedStart(entry);
-      const e = clampedEnd(entry);
-      bar.style.left = `${(s / HOUR_RANGE_MIN) * 100}%`;
-      bar.style.width = `${Math.max(1, ((e - s) / HOUR_RANGE_MIN) * 100)}%`;
+      const s = clampedStart(entry, hourRange);
+      const e = clampedEnd(entry, hourRange);
+      bar.style.left = `${(s / hourRange.rangeMin) * 100}%`;
+      bar.style.width = `${Math.max(1, ((e - s) / hourRange.rangeMin) * 100)}%`;
       laneEl.append(bar);
     });
     lanesEl.append(laneEl);
@@ -725,7 +722,7 @@ function renderEventBar(entry, options = {}) {
   bar.type = "button";
   bar.className = options.fullDay ? "event-bar fullday" : "event-bar";
   bar.addEventListener("click", () => openExistingEvent(entry));
-  bar.style.backgroundColor = eventColor(options.colorIndex);
+  bar.style.background = eventBackground(entry);
 
   const timeText = formatTimeRange(entry);
   const label = options.compact ? entry.title : formatEventBarText(entry);
@@ -741,38 +738,121 @@ function formatEventBarText(entry) {
   return names ? `${entry.title} - ${names}` : entry.title;
 }
 
-function eventColor(index) {
-  const safeIndex = Number.isFinite(index) ? index : 0;
+function eventBackground(entry) {
+  const eventMembers = eventMemberNames(entry);
+  if (eventMembers.length <= 1) return memberColor(eventMembers[0]);
+
+  const size = 100 / eventMembers.length;
+  const stops = eventMembers.flatMap((name, index) => {
+    const color = memberColor(name);
+    const start = index * size;
+    const end = (index + 1) * size;
+    return [`${color} ${start}%`, `${color} ${end}%`];
+  });
+  return `linear-gradient(to bottom, ${stops.join(", ")})`;
+}
+
+function eventMemberNames(entry) {
+  if (!Array.isArray(entry.members)) return [];
+  return [...new Set(entry.members.filter(Boolean))];
+}
+
+function memberColor(name) {
+  const index = members.indexOf(name);
+  const safeIndex = index >= 0 ? index : stableColorIndex(name);
   return EVENT_COLORS[safeIndex % EVENT_COLORS.length];
 }
 
-function hourPosition(hour) {
-  return ((hour - HOUR_START) / (HOUR_END - HOUR_START)) * 100;
+function stableColorIndex(value) {
+  if (!value) return 0;
+  let hash = 0;
+  for (const char of value) {
+    hash = (hash * 31 + char.charCodeAt(0)) >>> 0;
+  }
+  return hash;
 }
 
-function clampedStart(entry) {
-  if (!entry.time) return 0;
-  const [h, m] = entry.time.split(":").map(Number);
-  return Math.max(0, Math.min(HOUR_RANGE_MIN, h * 60 + m - HOUR_START * 60));
+function dayHourRange(entries) {
+  let startMin = HOUR_START * 60;
+  let endMin = HOUR_END * 60;
+
+  entries.forEach((entry) => {
+    const eventStart = eventStartMinute(entry);
+    if (eventStart === null) return;
+    startMin = Math.min(startMin, eventStart);
+    endMin = Math.max(endMin, eventEndMinute(entry, eventStart));
+  });
+
+  const stepMin = HOUR_LABEL_STEP * 60;
+  startMin = Math.max(0, Math.floor(startMin / stepMin) * stepMin);
+  endMin = Math.min(24 * 60, Math.ceil(endMin / stepMin) * stepMin);
+  if (endMin <= startMin) endMin = Math.min(24 * 60, startMin + stepMin);
+
+  const labels = [];
+  for (let minute = startMin; minute <= endMin; minute += stepMin) {
+    labels.push(minute / 60);
+  }
+  if (labels[labels.length - 1] !== endMin / 60) {
+    labels.push(endMin / 60);
+  }
+
+  return {
+    startHour: startMin / 60,
+    endHour: endMin / 60,
+    startMin,
+    endMin,
+    rangeMin: endMin - startMin,
+    labels,
+  };
 }
 
-function clampedEnd(entry) {
-  const endStr = entry.endTime || (entry.time ? shiftTime(entry.time, 60) : "");
-  if (!endStr) return HOUR_RANGE_MIN;
-  const [h, m] = endStr.split(":").map(Number);
-  const raw = h * 60 + m - HOUR_START * 60;
-  const start = clampedStart(entry);
-  return Math.max(start + 15, Math.min(HOUR_RANGE_MIN, raw));
+function hourPosition(hour, range) {
+  return ((hour - range.startHour) / (range.endHour - range.startHour)) * 100;
 }
 
-function packLanes(entries) {
-  const sorted = [...entries].sort((a, b) => clampedStart(a) - clampedStart(b));
+function clampedStart(entry, range) {
+  const start = eventStartMinute(entry);
+  if (start === null) return 0;
+  return Math.max(0, Math.min(range.rangeMin, start - range.startMin));
+}
+
+function clampedEnd(entry, range) {
+  const startMinute = eventStartMinute(entry);
+  const endMinute = eventEndMinute(entry, startMinute);
+  const raw = endMinute - range.startMin;
+  const start = clampedStart(entry, range);
+  return Math.max(start + 15, Math.min(range.rangeMin, raw));
+}
+
+function eventStartMinute(entry) {
+  return timeToMinutes(entry.time);
+}
+
+function eventEndMinute(entry, startMinute = eventStartMinute(entry)) {
+  if (startMinute === null) return HOUR_END * 60;
+  const parsedEnd = timeToMinutes(entry.endTime);
+  let endMinute = parsedEnd === null ? startMinute + 60 : parsedEnd;
+  if (endMinute <= startMinute) endMinute += 24 * 60;
+  return Math.min(24 * 60, endMinute);
+}
+
+function timeToMinutes(time) {
+  if (!time) return null;
+  const [h, m] = time.split(":").map(Number);
+  if (Number.isNaN(h) || Number.isNaN(m)) return null;
+  return h * 60 + m;
+}
+
+function packLanes(entries, range) {
+  const sorted = [...entries].sort(
+    (a, b) => clampedStart(a, range) - clampedStart(b, range),
+  );
   const lanes = [];
   for (const entry of sorted) {
-    const start = clampedStart(entry);
+    const start = clampedStart(entry, range);
     let placed = false;
     for (const lane of lanes) {
-      if (clampedEnd(lane[lane.length - 1]) <= start) {
+      if (clampedEnd(lane[lane.length - 1], range) <= start) {
         lane.push(entry);
         placed = true;
         break;
@@ -1025,7 +1105,11 @@ function renderMemberChoices(selected) {
     input.type = "checkbox";
     input.value = name;
     input.checked = selected.includes(name);
-    labelEl.append(input, document.createTextNode(name));
+    const swatch = document.createElement("span");
+    swatch.className = "member-swatch";
+    swatch.style.backgroundColor = memberColor(name);
+    swatch.setAttribute("aria-hidden", "true");
+    labelEl.append(input, swatch, document.createTextNode(name));
     row.append(labelEl);
   });
   memberChoices.append(row);
