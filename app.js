@@ -992,7 +992,7 @@ function stableColorIndex(value) {
   return hash;
 }
 
-function dayHourRange(entries) {
+function dayHourRange(entries, currentTimeMin = null) {
   let startMin = HOUR_START * 60;
   let endMin = HOUR_END * 60;
 
@@ -1002,6 +1002,11 @@ function dayHourRange(entries) {
     startMin = Math.min(startMin, eventStart);
     endMin = Math.max(endMin, eventEndMinute(entry, eventStart));
   });
+
+  if (Number.isFinite(currentTimeMin)) {
+    startMin = Math.min(startMin, currentTimeMin);
+    endMin = Math.max(endMin, currentTimeMin);
+  }
 
   const stepMin = HOUR_LABEL_STEP * 60;
   startMin = Math.max(0, Math.floor(startMin / stepMin) * stepMin);
@@ -1206,7 +1211,7 @@ function finishDrag(event) {
     const threshold = Math.min(160, thresholdWidth * 0.18);
     if (Math.abs(deltaX) < threshold) {
       if (singleWeekPanels) {
-        resetTrack(track);
+        snapSingleWeekTrack(track, 0);
       } else {
         snapWeekTrack(track, 0);
       }
@@ -1215,9 +1220,11 @@ function finishDrag(event) {
 
     const direction = deltaX < 0 ? 1 : -1;
     if (singleWeekPanels) {
-      anchorDate = addDays(anchorDate, direction * 7);
-      saveSettings();
-      render();
+      snapSingleWeekTrack(track, -direction * panelWidth, () => {
+        anchorDate = addDays(anchorDate, direction * 7);
+        saveSettings();
+        render();
+      });
       return;
     }
 
@@ -1252,7 +1259,7 @@ function cancelDrag() {
   drag = null;
   if (track) {
     if (viewMode === "week" && usesSingleWeekPanels()) {
-      resetTrack(track);
+      snapSingleWeekTrack(track, 0);
     } else if (viewMode === "week") {
       snapWeekTrack(track, 0);
     } else {
@@ -1298,6 +1305,19 @@ function snapWeekTrack(track, progress, done) {
     } else {
       track.classList.remove("sliding");
       setWeekTrackProgress(track, 0);
+    }
+  });
+}
+
+function snapSingleWeekTrack(track, offset, done) {
+  track.classList.add("sliding");
+  setTrackOffset(track, offset);
+  scheduleSnapCompletion(track, WEEK_SWIPE_ANIMATION_MS, () => {
+    if (done) {
+      done();
+    } else {
+      track.classList.remove("sliding");
+      clearWeekTrackProgress(track);
     }
   });
 }
