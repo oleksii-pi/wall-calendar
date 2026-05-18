@@ -522,6 +522,22 @@ textarea {
   display: none;
 }
 
+.time-grid {
+  grid-template-columns: repeat(2, max-content);
+  align-items: center;
+  gap: 12px;
+}
+
+.time-grid label {
+  grid-template-columns: auto auto;
+  align-items: center;
+  gap: 6px;
+}
+
+.time-grid input[type="time"] {
+  width: auto;
+}
+
 .inline-check {
   display: inline-flex;
   align-items: center;

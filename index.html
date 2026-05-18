@@ -23,9 +23,8 @@
         <h2 id="eventDialogTitle" tabindex="-1">New event</h2>
         <input id="eventId" type="hidden">
         <div class="title-field">
-          <label id="speechLabel" for="speechText">Title</label>
           <div class="title-input-row">
-            <textarea id="speechText" rows="3" autocomplete="off" required readonly></textarea>
+            <textarea id="speechText" rows="3" autocomplete="off" aria-label="Title" required readonly></textarea>
             <button id="titleDictateButton" class="icon-button title-dictate-button" type="button" aria-label="Dictate title" title="Dictate title">
               <svg viewBox="0 0 24 24" aria-hidden="true">
                 <path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3Z"></path>
@@ -35,12 +34,10 @@
             </button>
           </div>
         </div>
-        <fieldset id="memberChoices">
-          <legend id="membersLegend">People</legend>
+        <fieldset id="memberChoices" aria-label="People">
         </fieldset>
         <label>
-          <span id="dateLabel">Date</span>
-          <input id="eventDate" type="date" required>
+          <input id="eventDate" type="date" aria-label="Date" required>
         </label>
         <label class="inline-check">
           <input id="eventAllDay" type="checkbox">
@@ -49,11 +46,11 @@
         <div class="compact-grid time-grid">
           <label>
             <span id="timeLabel">Start</span>
-            <input id="eventTime" type="time" step="900">
+            <input id="eventTime" type="time" step="300">
           </label>
           <label>
             <span id="endLabel">End</span>
-            <input id="eventEndTime" type="time" step="900">
+            <input id="eventEndTime" type="time" step="300">
           </label>
         </div>
         <menu>

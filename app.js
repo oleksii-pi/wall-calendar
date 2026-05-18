@@ -47,6 +47,7 @@ const memberChoices = document.querySelector("#memberChoices");
 const HOUR_START = 8;
 const HOUR_END = 22;
 const HOUR_LABEL_STEP = 2;
+const CREATE_TIME_ROUND_STEP = 60;
 const TAP_MOVE_THRESHOLD = 10;
 const SWIPE_ANIMATION_MS = 180;
 const WEEK_SWIPE_ANIMATION_MS = 280;
@@ -143,8 +144,7 @@ const i18n = {
       editEvent: "Termin bearbeiten",
       eventText: "Text",
       language: "Sprache",
-      members: "Personen",
-      membersEmpty: "Personen werden in den Einstellungen verwaltet.",
+      membersEmpty: "In den Einstellungen verwaltet.",
       membersInput: "Namen, durch Komma getrennt",
       menuMonth: "Monat",
       menuWeek: "Wochen",
@@ -171,9 +171,7 @@ const i18n = {
       syncHint: "PIN eingeben, um diesen Kalender zu verbinden.",
       syncPin: "PIN",
       syncTitle: "Synchronisierung verbinden",
-      title: "Titel",
       dictateTitle: "Titel diktieren",
-      date: "Datum",
       time: "Beginn",
       end: "Ende",
       allDay: "Ganztägig",
@@ -241,8 +239,7 @@ const i18n = {
       editEvent: "Edit event",
       eventText: "Text",
       language: "Language",
-      members: "People",
-      membersEmpty: "People are managed in settings.",
+      membersEmpty: "Managed in settings.",
       membersInput: "Names, separated by comma",
       menuMonth: "Month",
       menuWeek: "Week",
@@ -268,9 +265,7 @@ const i18n = {
       syncHint: "Enter the PIN to connect this calendar.",
       syncPin: "PIN",
       syncTitle: "Connect sync",
-      title: "Title",
       dictateTitle: "Dictate title",
-      date: "Date",
       time: "Start",
       end: "End",
       allDay: "Full day",
@@ -338,8 +333,7 @@ const i18n = {
       editEvent: "Редагувати подію",
       eventText: "Текст",
       language: "Мова",
-      members: "Люди",
-      membersEmpty: "Люди налаштовуються в параметрах.",
+      membersEmpty: "Налаштовується в параметрах.",
       membersInput: "Імена через кому",
       menuMonth: "Місяць",
       menuWeek: "Тиждень",
@@ -366,9 +360,7 @@ const i18n = {
       syncHint: "Введіть PIN, щоб підключити цей календар.",
       syncPin: "PIN",
       syncTitle: "Підключити синхронізацію",
-      title: "Назва",
       dictateTitle: "Диктувати назву",
-      date: "Дата",
       time: "Початок",
       end: "Кінець",
       allDay: "Цілий день",
@@ -1198,9 +1190,22 @@ function eventEndMinute(entry, startMinute = eventStartMinute(entry)) {
 }
 
 function timeToMinutes(time) {
-  if (!time) return null;
-  const [h, m] = time.split(":").map(Number);
-  if (Number.isNaN(h) || Number.isNaN(m)) return null;
+  const match = String(time || "").match(/^(\d{1,2}):(\d{2})$/);
+  if (!match) return null;
+
+  const h = Number(match[1]);
+  const m = Number(match[2]);
+  if (
+    !Number.isInteger(h) ||
+    !Number.isInteger(m) ||
+    h < 0 ||
+    h > 23 ||
+    m < 0 ||
+    m > 59
+  ) {
+    return null;
+  }
+
   return h * 60 + m;
 }
 
@@ -1644,8 +1649,11 @@ function timeFromWeekPoint(dayEl, clientX) {
   const rect = lanes.getBoundingClientRect();
   if (!rect.width) return "";
   const percent = Math.max(0, Math.min(1, (clientX - rect.left) / rect.width));
-  const minute = roundToStep(startMin + percent * (endMin - startMin), 15);
-  return minutesToTime(Math.max(0, Math.min(23 * 60 + 45, minute)));
+  const minute = roundToStep(
+    startMin + percent * (endMin - startMin),
+    CREATE_TIME_ROUND_STEP,
+  );
+  return minutesToTime(Math.max(0, Math.min(23 * 60, minute)));
 }
 
 function roundToStep(minute, step) {
@@ -1750,7 +1758,7 @@ function renderSettingsMemberColors() {
     colorButton.className = "member-color-button";
     colorButton.dataset.member = name;
     colorButton.style.backgroundColor = draftMemberColors[name];
-    colorButton.setAttribute("aria-label", `${label("members")} ${name}`);
+    colorButton.setAttribute("aria-label", name);
 
     const nameEl = document.createElement("span");
     nameEl.className = "member-color-name";
@@ -1809,9 +1817,6 @@ function parseMemberInput(value) {
 function renderMemberChoices(selected = []) {
   const selectedMembers = Array.isArray(selected) ? selected : [];
   memberChoices.innerHTML = "";
-  const legend = document.createElement("legend");
-  legend.textContent = label("members");
-  memberChoices.append(legend);
 
   if (members.length === 0) {
     const hint = document.createElement("p");
@@ -1972,8 +1977,6 @@ function applyLanguage() {
   );
   settingsButton.textContent = label("menuSettings");
   eventDialogTitle.textContent = label("newEvent");
-  document.querySelector("#speechLabel").textContent = label("title");
-  document.querySelector("#dateLabel").textContent = label("date");
   document.querySelector("#timeLabel").textContent = label("time");
   document.querySelector("#endLabel").textContent = label("end");
   document.querySelector("#allDayLabel").textContent = label("allDay");
