@@ -149,7 +149,7 @@ const i18n = {
       push: "",
       save: "Speichern",
       settings: "Einstellungen",
-      settingsHint: "Daten bleiben nur in diesem Browser.",
+      settingsHint: "Daten bleiben in diesem Browser und in den Clouds.",
       resetSync: "Reset sync",
       syncConnect: "Verbinden",
       syncError:
@@ -237,7 +237,7 @@ const i18n = {
       push: "",
       save: "Save",
       settings: "Settings",
-      settingsHint: "Data stays in this browser.",
+      settingsHint: "Data stays in this browser and in the clouds.",
       resetSync: "Reset sync",
       syncConnect: "Connect",
       syncError: "Connection failed. Check the link, PIN, and Firebase rules.",
@@ -324,7 +324,7 @@ const i18n = {
       push: "",
       save: "Зберегти",
       settings: "Налаштування",
-      settingsHint: "Дані залишаються тільки в цьому браузері.",
+      settingsHint: "Дані залишаються в цьому браузері та в хмарах.",
       resetSync: "Reset sync",
       syncConnect: "Підключити",
       syncError:
