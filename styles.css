@@ -512,6 +512,11 @@ textarea {
   resize: vertical;
 }
 
+#eventDate {
+  justify-self: start;
+  width: fit-content;
+}
+
 .compact-grid {
   display: grid;
   grid-template-columns: 1fr 1fr;
@@ -811,5 +816,15 @@ button[type="submit"]:not(#confirmDelete) {
 
   .compact-grid {
     grid-template-columns: 1fr;
+  }
+
+  .time-grid label {
+    grid-template-columns: 1fr;
+    align-items: start;
+    gap: 4px;
+  }
+
+  .time-grid input[type="time"] {
+    justify-self: start;
   }
 }
