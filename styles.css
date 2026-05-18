@@ -93,7 +93,8 @@ body {
 }
 
 .week,
-.month {
+.month,
+.single-day {
   flex: 1;
   display: grid;
   min-width: 0;
@@ -110,6 +111,10 @@ body {
   grid-template-rows: auto 1fr;
 }
 
+.single-day {
+  grid-template-rows: auto minmax(0, 1fr);
+}
+
 .range-title,
 .month-title {
   min-width: 0;
@@ -119,6 +124,133 @@ body {
   font-size: clamp(14px, 1.4vw, 20px);
   font-weight: 650;
   overflow-wrap: anywhere;
+}
+
+.day-view .calendar-track {
+  width: 600vw;
+  transform: translate3d(-200vw, 0, 0);
+}
+
+.day-view .calendar-panel {
+  flex: 0 0 100vw;
+  width: 100vw;
+}
+
+.single-day-header {
+  display: grid;
+  grid-template-columns: auto auto minmax(0, 1fr);
+  align-items: baseline;
+  gap: 10px;
+  min-width: 0;
+  padding: 10px 14px;
+  border-bottom: 1px solid var(--line);
+}
+
+.single-day-weekday {
+  color: var(--muted);
+  font-size: clamp(14px, 1.4vw, 20px);
+  font-weight: 760;
+  text-transform: uppercase;
+}
+
+.single-day-number {
+  font-size: clamp(28px, 3.8vw, 56px);
+  font-weight: 780;
+  line-height: 0.9;
+}
+
+.single-day-title {
+  min-width: 0;
+  color: var(--muted);
+  font-size: clamp(14px, 1.4vw, 20px);
+  font-weight: 650;
+  overflow-wrap: anywhere;
+}
+
+.single-day.special .single-day-weekday,
+.single-day.special .single-day-number {
+  color: var(--danger);
+}
+
+.single-day-body {
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr);
+  gap: 6px;
+  min-width: 0;
+  min-height: 0;
+  padding: 8px 10px 10px;
+  overflow: hidden;
+}
+
+.single-day-all-day {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+  padding-left: 62px;
+}
+
+.single-day-timeline {
+  display: grid;
+  grid-template-columns: 52px minmax(0, 1fr);
+  gap: 10px;
+  min-width: 0;
+  min-height: 0;
+}
+
+.single-day-hour-labels,
+.single-day-grid,
+.single-day-events {
+  position: relative;
+  min-height: 0;
+}
+
+.single-day-hour-label {
+  position: absolute;
+  right: 0;
+  transform: translateY(-50%);
+  color: var(--muted);
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+}
+
+.single-day-grid {
+  border-left: 1px solid var(--line);
+  background:
+    linear-gradient(to right, rgba(220, 228, 223, 0.42) 1px, transparent 1px)
+      0 0 / 25% 100%;
+}
+
+.single-day-hour-tick {
+  position: absolute;
+  left: 0;
+  right: 0;
+  height: 0;
+  border-top: 1px solid var(--line);
+  pointer-events: none;
+}
+
+.single-day-events {
+  height: 100%;
+  margin-left: 8px;
+}
+
+.event-bar-vertical {
+  bottom: auto;
+  align-items: flex-start;
+  padding: 5px 7px;
+  border-radius: 3px;
+  white-space: normal;
+  line-height: 1.2;
+}
+
+.current-time-marker {
+  position: absolute;
+  left: -8px;
+  right: 0;
+  z-index: 3;
+  height: 0;
+  border-top: 2px solid #1769ff;
+  pointer-events: none;
 }
 
 .day {
@@ -358,6 +490,24 @@ body {
   font-weight: 720;
 }
 
+.month-events {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.month-event-bar {
+  flex: 0 0 auto;
+  min-height: 16px;
+  padding: 1px 3px;
+  border-radius: 2px;
+  font-size: 11px;
+  line-height: 1.2;
+}
+
 .talk-button {
   position: fixed;
   top: 10px;
@@ -406,6 +556,12 @@ body {
   border: 0;
   text-align: left;
   cursor: pointer;
+}
+
+.app-menu button[aria-current="page"] {
+  background: #edf5f2;
+  color: var(--accent);
+  font-weight: 720;
 }
 
 dialog {
@@ -757,7 +913,8 @@ button[type="submit"]:not(#confirmDelete) {
   }
 
   .week,
-  .month {
+  .month,
+  .single-day {
     min-height: 0;
   }
 
@@ -799,6 +956,32 @@ button[type="submit"]:not(#confirmDelete) {
 
   .day-body {
     padding: 5px 6px;
+  }
+
+  .single-day-header {
+    padding: 8px 10px;
+  }
+
+  .single-day-body {
+    padding: 6px 8px 8px;
+  }
+
+  .single-day-all-day {
+    padding-left: 46px;
+  }
+
+  .single-day-timeline {
+    grid-template-columns: 40px minmax(0, 1fr);
+    gap: 8px;
+  }
+
+  .single-day-hour-label {
+    font-size: 10px;
+  }
+
+  .event-bar-vertical {
+    padding: 4px 5px;
+    font-size: 10px;
   }
 
   .hour-labels {

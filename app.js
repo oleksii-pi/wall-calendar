@@ -20,6 +20,8 @@ const FIREBASE_CONFIG = {
 const calendar = document.querySelector("#calendar");
 const talkButton = document.querySelector("#talkButton");
 const appMenu = document.querySelector("#appMenu");
+const dayViewButton = document.querySelector("#dayViewButton");
+const weekViewButton = document.querySelector("#weekViewButton");
 const monthViewButton = document.querySelector("#monthViewButton");
 const settingsButton = document.querySelector("#settingsButton");
 const addEventButton = document.querySelector("#addEventButton");
@@ -82,6 +84,7 @@ const EVENT_COLORS = [
   "#6dca91",
 ];
 const ACTIVE_PANEL_INDEX = 2;
+const VIEW_MODES = ["day", "week", "month"];
 const membersInput = document.querySelector("#membersInput");
 const memberColorSettings = document.querySelector("#memberColorSettings");
 const languageSelect = document.querySelector("#languageSelect");
@@ -146,6 +149,7 @@ const i18n = {
       language: "Sprache",
       membersEmpty: "In den Einstellungen verwaltet.",
       membersInput: "Namen, durch Komma getrennt",
+      menuDay: "Tag",
       menuMonth: "Monat",
       menuWeek: "Wochen",
       menuSettings: "Einstellungen",
@@ -241,6 +245,7 @@ const i18n = {
       language: "Language",
       membersEmpty: "Managed in settings.",
       membersInput: "Names, separated by comma",
+      menuDay: "Day",
       menuMonth: "Month",
       menuWeek: "Week",
       menuSettings: "Settings",
@@ -335,6 +340,7 @@ const i18n = {
       language: "Мова",
       membersEmpty: "Налаштовується в параметрах.",
       membersInput: "Імена через кому",
+      menuDay: "День",
       menuMonth: "Місяць",
       menuWeek: "Тиждень",
       menuSettings: "Налаштування",
@@ -500,7 +506,7 @@ let deletedEventIds = normalizeDeletedEventIds(
   loadJson(DELETED_EVENT_IDS_KEY, {}),
 );
 let language = supportedLanguage(settings.language || navigator.language);
-let viewMode = settings.viewMode === "month" ? "month" : "week";
+let viewMode = normalizeViewMode(settings.viewMode);
 let anchorDate = new Date();
 let draftMembers = [];
 let draftMemberColors = {};
@@ -545,21 +551,14 @@ calendar.addEventListener("pointermove", moveDrag);
 calendar.addEventListener("pointerup", finishDrag);
 calendar.addEventListener("pointercancel", cancelDrag);
 calendar.addEventListener("click", openNewEventFromClick);
-window.addEventListener("resize", refreshWeekTrackLayout);
+window.addEventListener("resize", refreshTrackLayout);
 document.addEventListener("visibilitychange", () => {
   if (!document.hidden) render();
 });
 
-monthViewButton.addEventListener("click", () => {
-  viewMode = viewMode === "month" ? "week" : "month";
-  appMenu.hidden = true;
-  anchorDate =
-    viewMode === "month"
-      ? new Date(new Date().getFullYear(), new Date().getMonth(), 1)
-      : startOfWeek(new Date());
-  saveSettings();
-  render();
-});
+dayViewButton.addEventListener("click", () => setViewMode("day"));
+weekViewButton.addEventListener("click", () => setViewMode("week"));
+monthViewButton.addEventListener("click", () => setViewMode("month"));
 
 settingsButton.addEventListener("click", () => {
   appMenu.hidden = true;
@@ -729,6 +728,22 @@ eventAllDay.addEventListener("change", () => {
   applyAllDayState();
 });
 
+function setViewMode(nextMode) {
+  const normalized = normalizeViewMode(nextMode);
+  viewMode = normalized;
+  appMenu.hidden = true;
+  const today = new Date();
+  if (viewMode === "month") {
+    anchorDate = new Date(today.getFullYear(), today.getMonth(), 1);
+  } else if (viewMode === "week") {
+    anchorDate = startOfWeek(today);
+  } else {
+    anchorDate = startOfDay(today);
+  }
+  saveSettings();
+  render();
+}
+
 function render() {
   calendar.className = `calendar ${viewMode}-view`;
   calendar.innerHTML = "";
@@ -736,15 +751,9 @@ function render() {
   const track = document.createElement("div");
   track.className = "calendar-track";
 
-  const base =
-    viewMode === "month"
-      ? new Date(anchorDate.getFullYear(), anchorDate.getMonth(), 1)
-      : startOfWeek(anchorDate);
-  const stepDate =
-    viewMode === "month"
-      ? (date, n) => addMonths(date, n)
-      : (date, n) => addDays(date, n * 7);
-  const renderer = viewMode === "month" ? renderMonth : renderWeek;
+  const base = viewBaseDate(anchorDate);
+  const stepDate = viewStepDate();
+  const renderer = viewRenderer();
 
   for (let offset = -2; offset <= 3; offset++) {
     const panel = document.createElement("div");
@@ -758,15 +767,86 @@ function render() {
   }
 
   calendar.append(track);
-  if (viewMode === "week" && !usesSingleWeekPanels()) {
-    setWeekTrackProgress(track, 0);
-  }
+  refreshTrackLayout();
   refreshCurrentTimeIndicators();
 
-  monthViewButton.textContent = label(
-    viewMode === "month" ? "menuWeek" : "menuMonth",
-  );
+  updateMenuLabels();
+}
+
+function viewBaseDate(date) {
+  if (viewMode === "month") {
+    return new Date(date.getFullYear(), date.getMonth(), 1);
+  }
+
+  if (viewMode === "week") return startOfWeek(date);
+
+  return startOfDay(date);
+}
+
+function viewStepDate() {
+  if (viewMode === "month") return (date, n) => addMonths(date, n);
+  if (viewMode === "week") return (date, n) => addDays(date, n * 7);
+  return (date, n) => addDays(date, n);
+}
+
+function viewRenderer() {
+  if (viewMode === "month") return renderMonth;
+  if (viewMode === "week") return renderWeek;
+  return renderDay;
+}
+
+function updateMenuLabels() {
+  addEventButton.textContent = label("add");
+  dayViewButton.textContent = label("menuDay");
+  weekViewButton.textContent = label("menuWeek");
+  monthViewButton.textContent = label("menuMonth");
   settingsButton.textContent = label("menuSettings");
+  dayViewButton.setAttribute("aria-current", viewMode === "day" ? "page" : "false");
+  weekViewButton.setAttribute(
+    "aria-current",
+    viewMode === "week" ? "page" : "false",
+  );
+  monthViewButton.setAttribute(
+    "aria-current",
+    viewMode === "month" ? "page" : "false",
+  );
+}
+
+function renderDay(day) {
+  const dateKey = toDateKey(day);
+  const holidayKeys = new Set(holidayEvents([day]).map((entry) => entry.date));
+  const dayEvents = events
+    .filter((entry) => entry.date === dateKey)
+    .sort(compareEvents);
+
+  const view = document.createElement("section");
+  view.className = [
+    "single-day",
+    sameDate(day, new Date()) ? "today" : "",
+    day.getDay() === 0 || holidayKeys.has(dateKey) ? "special" : "",
+  ]
+    .filter(Boolean)
+    .join(" ");
+  view.dataset.date = dateKey;
+
+  const header = document.createElement("div");
+  header.className = "single-day-header";
+
+  const weekday = document.createElement("div");
+  weekday.className = "single-day-weekday";
+  weekday.textContent = t().weekdays[day.getDay()];
+
+  const number = document.createElement("div");
+  number.className = "single-day-number";
+  number.textContent = day.getDate();
+
+  const title = document.createElement("div");
+  title.className = "single-day-title";
+  title.textContent = `${standaloneMonthName(day.getMonth())} ${day.getFullYear()}`;
+
+  header.append(weekday, number, title);
+  view.append(header, renderDaySchedule(dayEvents, day));
+  return view;
 }
 
 function renderWeek(monday) {
@@ -855,17 +935,96 @@ function renderMonth(monthDate) {
 
     dayEl.append(
       number,
-      renderDayBody(dayEvents, {
-        compact: true,
-        date: day,
-        showCurrentTime: day.getMonth() === monthDate.getMonth(),
-      }),
+      renderMonthEvents(dayEvents),
     );
     grid.append(dayEl);
   });
 
   month.append(grid);
   return month;
+}
+
+function renderMonthEvents(dayEvents) {
+  const list = document.createElement("div");
+  list.className = "month-events";
+  dayEvents.forEach((entry) => {
+    list.append(
+      renderEventBar(entry, {
+        fullDay: true,
+        month: true,
+      }),
+    );
+  });
+  return list;
+}
+
+function renderDaySchedule(dayEvents, day) {
+  const allDay = dayEvents.filter(isAllDay);
+  const timed = dayEvents.filter((entry) => !isAllDay(entry));
+  const currentTimeMin = dayCurrentMinute({ date: day });
+  const hourRange = dayHourRange(timed, currentTimeMin);
+
+  const body = document.createElement("div");
+  body.className = "single-day-body";
+  body.dataset.date = toDateKey(day);
+  body.dataset.startMin = String(hourRange.startMin);
+  body.dataset.endMin = String(hourRange.endMin);
+
+  if (allDay.length > 0) {
+    const allDayRow = document.createElement("div");
+    allDayRow.className = "single-day-all-day";
+    allDay.forEach((entry) => {
+      allDayRow.append(renderEventBar(entry, { fullDay: true }));
+    });
+    body.append(allDayRow);
+  }
+
+  const timeline = document.createElement("div");
+  timeline.className = "single-day-timeline";
+
+  const labels = document.createElement("div");
+  labels.className = "single-day-hour-labels";
+
+  const grid = document.createElement("div");
+  grid.className = "single-day-grid";
+
+  hourRange.labels.forEach((hour) => {
+    const top = `${currentTimePosition(hour * 60, hourRange)}%`;
+    const labelEl = document.createElement("span");
+    labelEl.className = "single-day-hour-label";
+    labelEl.style.top = top;
+    labelEl.textContent = hour;
+    labels.append(labelEl);
+
+    const tick = document.createElement("div");
+    tick.className = "single-day-hour-tick";
+    tick.style.top = top;
+    grid.append(tick);
+  });
+
+  const eventLayer = document.createElement("div");
+  eventLayer.className = "single-day-events";
+  packDayColumns(timed, hourRange).forEach(({ entry, column, columns }) => {
+    const start = clampedStart(entry, hourRange);
+    const end = clampedEnd(entry, hourRange);
+    const bar = renderEventBar(entry, { vertical: true });
+    bar.classList.add("event-bar-vertical");
+    bar.style.top = `${(start / hourRange.rangeMin) * 100}%`;
+    bar.style.height = `${Math.max(1.5, ((end - start) / hourRange.rangeMin) * 100)}%`;
+    bar.style.left = `${(column / columns) * 100}%`;
+    bar.style.width = `calc(${100 / columns}% - 4px)`;
+    eventLayer.append(bar);
+  });
+
+  if (currentTimeMin !== null) {
+    const line = renderCurrentTimeMarker(currentTimeMin, hourRange);
+    if (line) eventLayer.append(line);
+  }
+
+  grid.append(eventLayer);
+  timeline.append(labels, grid);
+  body.append(timeline);
+  return body;
 }
 
 function renderDayBody(dayEvents, options = {}) {
@@ -966,6 +1125,15 @@ function renderCurrentTimeLine(minute, hourRange) {
   return line;
 }
 
+function renderCurrentTimeMarker(minute, hourRange) {
+  if (minute < hourRange.startMin || minute > hourRange.endMin) return null;
+  const line = document.createElement("div");
+  line.className = "current-time-marker";
+  line.style.top = `${currentTimePosition(minute, hourRange)}%`;
+  line.setAttribute("aria-hidden", "true");
+  return line;
+}
+
 function currentTimePosition(minute, hourRange) {
   return ((minute - hourRange.startMin) / hourRange.rangeMin) * 100;
 }
@@ -982,14 +1150,22 @@ function refreshCurrentTimeIndicators() {
       line.remove();
     }
   });
+  calendar.querySelectorAll(".current-time-marker").forEach((line) => {
+    const body = line.closest(".single-day-body");
+    if (body?.dataset.date !== todayKey) {
+      line.remove();
+    }
+  });
 
   const todayBodies = calendar.querySelectorAll(
-    ".day.today .day-body, .month-day.today:not(.outside) .day-body",
+    ".day.today .day-body, .month-day.today:not(.outside) .day-body, .single-day.today .single-day-body",
   );
 
   todayBodies.forEach((body) => {
-    const lanes = body.querySelector(".lanes");
-    const line = body.querySelector(".current-time-line");
+    const lanes = body.querySelector(".lanes, .single-day-events");
+    const line = body.querySelector(
+      ".current-time-line, .current-time-marker",
+    );
     const startMin = Number(body.dataset.startMin);
     const endMin = Number(body.dataset.endMin);
     if (
@@ -1008,7 +1184,11 @@ function refreshCurrentTimeIndicators() {
 
     const position = ((minute - startMin) / (endMin - startMin)) * 100;
     if (line) {
-      line.style.left = `${position}%`;
+      if (line.classList.contains("current-time-marker")) {
+        line.style.top = `${position}%`;
+      } else {
+        line.style.left = `${position}%`;
+      }
       return;
     }
 
@@ -1022,13 +1202,21 @@ function renderEventBar(entry, options = {}) {
   const bar = document.createElement("button");
   bar.type = "button";
   bar.className = options.fullDay ? "event-bar fullday" : "event-bar";
+  if (options.month) bar.classList.add("month-event-bar");
   bar.addEventListener("click", () => openExistingEvent(entry));
   bar.style.background = eventBackground(entry);
 
   const timeText = formatTimeRange(entry);
-  const label = options.compact ? entry.title : formatEventBarText(entry);
+  const eventText = formatEventBarText(entry);
+  const label = options.compact
+    ? entry.title
+    : options.month && timeText
+      ? `${timeText} ${eventText}`
+    : options.vertical && timeText
+      ? `${timeText} ${eventText}`
+      : eventText;
   bar.textContent = label;
-  bar.title = timeText ? `${timeText} ${label}` : label;
+  bar.title = options.vertical || !timeText ? label : `${timeText} ${label}`;
   return bar;
 }
 
@@ -1229,6 +1417,30 @@ function packLanes(entries, range) {
   return lanes;
 }
 
+function packDayColumns(entries, range) {
+  const sorted = [...entries].sort((a, b) => {
+    const startDiff = clampedStart(a, range) - clampedStart(b, range);
+    if (startDiff) return startDiff;
+    return clampedEnd(b, range) - clampedEnd(a, range);
+  });
+  const columns = [];
+  const packed = [];
+
+  sorted.forEach((entry) => {
+    const start = clampedStart(entry, range);
+    let column = columns.findIndex((lastEnd) => lastEnd <= start);
+    if (column === -1) {
+      column = columns.length;
+      columns.push(0);
+    }
+    columns[column] = clampedEnd(entry, range);
+    packed.push({ entry, column });
+  });
+
+  const columnCount = Math.max(1, columns.length);
+  return packed.map((item) => ({ ...item, columns: columnCount }));
+}
+
 function startTitleDictation() {
   if (titleRecording) {
     titleRecording.stop();
@@ -1392,7 +1604,7 @@ function finishDrag(event) {
     anchorDate =
       viewMode === "month"
         ? addMonths(anchorDate, direction)
-        : addDays(anchorDate, direction * 7);
+        : addDays(anchorDate, direction);
     saveSettings();
     render();
   });
@@ -1576,7 +1788,7 @@ function getCalendarViewportWidth() {
   return calendar.getBoundingClientRect().width || window.innerWidth;
 }
 
-function refreshWeekTrackLayout() {
+function refreshTrackLayout() {
   if (viewMode !== "week" || drag) return;
   const track = calendar.querySelector(".calendar-track");
   if (!track) return;
@@ -1611,8 +1823,8 @@ function newEventFromPointer(event) {
 function newEventFromPoint(clientX, clientY, fallbackTarget) {
   const pointTarget = document.elementFromPoint(clientX, clientY);
   const dayEl =
-    pointTarget?.closest(".day, .month-day") ||
-    fallbackTarget?.closest(".day, .month-day");
+    pointTarget?.closest(".day, .month-day, .single-day") ||
+    fallbackTarget?.closest(".day, .month-day, .single-day");
   if (!dayEl?.dataset.date) return null;
 
   const parsed = {
@@ -1622,6 +1834,15 @@ function newEventFromPoint(clientX, clientY, fallbackTarget) {
 
   if (viewMode === "week" && dayEl.classList.contains("day")) {
     const time = timeFromWeekPoint(dayEl, clientX);
+    if (time) {
+      parsed.time = time;
+      parsed.endTime = shiftTime(time, 60);
+      parsed.allDay = false;
+    }
+  }
+
+  if (viewMode === "day" && dayEl.classList.contains("single-day")) {
+    const time = timeFromDayPoint(dayEl, clientY);
     if (time) {
       parsed.time = time;
       parsed.endTime = shiftTime(time, 60);
@@ -1649,6 +1870,30 @@ function timeFromWeekPoint(dayEl, clientX) {
   const rect = lanes.getBoundingClientRect();
   if (!rect.width) return "";
   const percent = Math.max(0, Math.min(1, (clientX - rect.left) / rect.width));
+  const minute = roundToStep(
+    startMin + percent * (endMin - startMin),
+    CREATE_TIME_ROUND_STEP,
+  );
+  return minutesToTime(Math.max(0, Math.min(23 * 60, minute)));
+}
+
+function timeFromDayPoint(dayEl, clientY) {
+  const body = dayEl.querySelector(".single-day-body");
+  const eventsLayer = dayEl.querySelector(".single-day-events");
+  if (!body || !eventsLayer) return "";
+
+  const startMin = Number(body.dataset.startMin);
+  const endMin = Number(body.dataset.endMin);
+  if (
+    !Number.isFinite(startMin) ||
+    !Number.isFinite(endMin) ||
+    endMin <= startMin
+  )
+    return "";
+
+  const rect = eventsLayer.getBoundingClientRect();
+  if (!rect.height) return "";
+  const percent = Math.max(0, Math.min(1, (clientY - rect.top) / rect.height));
   const minute = roundToStep(
     startMin + percent * (endMin - startMin),
     CREATE_TIME_ROUND_STEP,
@@ -1971,11 +2216,7 @@ function applyLanguage() {
   talkButton.setAttribute("aria-label", label("push"));
   titleDictateButton.setAttribute("aria-label", label("dictateTitle"));
   titleDictateButton.title = label("dictateTitle");
-  addEventButton.textContent = label("add");
-  monthViewButton.textContent = label(
-    viewMode === "month" ? "menuWeek" : "menuMonth",
-  );
-  settingsButton.textContent = label("menuSettings");
+  updateMenuLabels();
   eventDialogTitle.textContent = label("newEvent");
   document.querySelector("#timeLabel").textContent = label("time");
   document.querySelector("#endLabel").textContent = label("end");
@@ -2021,6 +2262,10 @@ function supportedLanguage(value) {
     .slice(0, 2)
     .toLowerCase();
   return ["de", "en", "uk"].includes(code) ? code : "en";
+}
+
+function normalizeViewMode(value) {
+  return VIEW_MODES.includes(value) ? value : "week";
 }
 
 function t() {
