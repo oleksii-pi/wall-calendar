@@ -82,8 +82,25 @@
         <div id="memberColorSettings" class="member-color-settings"></div>
         <p class="hint" id="settingsHint">Data stays in this browser.</p>
         <menu>
+          <button value="reset-sync" type="button" id="resetSync">Reset sync</button>
           <button value="cancel" type="button" id="cancelSettings">Cancel</button>
           <button value="default" type="submit" id="saveSettings">Save</button>
+        </menu>
+      </form>
+    </dialog>
+
+    <dialog id="syncDialog">
+      <form method="dialog" id="syncForm">
+        <h2 id="syncTitle" tabindex="-1">Connect sync</h2>
+        <p class="hint" id="syncHint">Enter the 4-character PIN to connect this calendar.</p>
+        <label>
+          <span id="syncPinLabel">PIN</span>
+          <input id="syncPin" type="text" autocomplete="one-time-code" inputmode="text" maxlength="4" required>
+        </label>
+        <p class="hint sync-error" id="syncError" hidden></p>
+        <menu>
+          <button value="cancel" type="button" id="cancelSync">Cancel</button>
+          <button value="default" type="submit" id="connectSync">Connect</button>
         </menu>
       </form>
     </dialog>
@@ -99,6 +116,6 @@
       </form>
     </dialog>
 
-    <script src="app.js"></script>
+    <script type="module" src="app.js"></script>
   </body>
 </html>

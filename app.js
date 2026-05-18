@@ -1,6 +1,21 @@
 const STORAGE_KEY = "wallCalendarDataV1";
 const MEMBER_KEY = "wallCalendarMembersV1";
+const MEMBER_COLORS_KEY = "wallCalendarMemberColorsV1";
 const SETTINGS_KEY = "wallCalendarSettingsV1";
+const DELETED_EVENT_IDS_KEY = "wallCalendarDeletedEventIdsV1";
+const SYNC_SECRET_KEY = "wallCalendarSyncSecretV1";
+const FIREBASE_SDK_VERSION = "12.13.0";
+const PIN_LENGTH = 4;
+
+const FIREBASE_CONFIG = {
+  apiKey: "AIzaSyDEP9NCH4n53DKO3uBm4uZODsfBWSph4_8",
+  authDomain: "wall-calendar-63a0c.firebaseapp.com",
+  projectId: "wall-calendar-63a0c",
+  storageBucket: "wall-calendar-63a0c.firebasestorage.app",
+  messagingSenderId: "84388282623",
+  appId: "1:84388282623:web:ce48fd9060132c70a2ccca",
+  measurementId: "G-5NKJGSC9KM",
+};
 
 const calendar = document.querySelector("#calendar");
 const talkButton = document.querySelector("#talkButton");
@@ -11,11 +26,14 @@ const addEventButton = document.querySelector("#addEventButton");
 const eventDialog = document.querySelector("#eventDialog");
 const settingsDialog = document.querySelector("#settingsDialog");
 const confirmDialog = document.querySelector("#confirmDialog");
+const syncDialog = document.querySelector("#syncDialog");
 const eventForm = document.querySelector("#eventForm");
 const settingsForm = document.querySelector("#settingsForm");
 const confirmForm = document.querySelector("#confirmForm");
+const syncForm = document.querySelector("#syncForm");
 const eventDialogTitle = document.querySelector("#eventDialogTitle");
 const settingsTitle = document.querySelector("#settingsTitle");
+const syncTitle = document.querySelector("#syncTitle");
 const eventId = document.querySelector("#eventId");
 const speechText = document.querySelector("#speechText");
 const titleDictateButton = document.querySelector("#titleDictateButton");
@@ -67,6 +85,9 @@ const membersInput = document.querySelector("#membersInput");
 const memberColorSettings = document.querySelector("#memberColorSettings");
 const languageSelect = document.querySelector("#languageSelect");
 const deleteEvent = document.querySelector("#deleteEvent");
+const resetSyncButton = document.querySelector("#resetSync");
+const syncPin = document.querySelector("#syncPin");
+const syncError = document.querySelector("#syncError");
 
 const i18n = {
   de: {
@@ -129,6 +150,13 @@ const i18n = {
       save: "Speichern",
       settings: "Einstellungen",
       settingsHint: "Daten bleiben nur in diesem Browser.",
+      resetSync: "Reset sync",
+      syncConnect: "Verbinden",
+      syncError:
+        "Verbindung fehlgeschlagen. Prüfe Link, PIN und Firebase-Regeln.",
+      syncHint: "PIN eingeben, um diesen Kalender zu verbinden.",
+      syncPin: "PIN",
+      syncTitle: "Synchronisierung verbinden",
       title: "Titel",
       dictateTitle: "Titel diktieren",
       date: "Datum",
@@ -210,6 +238,12 @@ const i18n = {
       save: "Save",
       settings: "Settings",
       settingsHint: "Data stays in this browser.",
+      resetSync: "Reset sync",
+      syncConnect: "Connect",
+      syncError: "Connection failed. Check the link, PIN, and Firebase rules.",
+      syncHint: "Enter the PIN to connect this calendar.",
+      syncPin: "PIN",
+      syncTitle: "Connect sync",
       title: "Title",
       dictateTitle: "Dictate title",
       date: "Date",
@@ -291,6 +325,13 @@ const i18n = {
       save: "Зберегти",
       settings: "Налаштування",
       settingsHint: "Дані залишаються тільки в цьому браузері.",
+      resetSync: "Reset sync",
+      syncConnect: "Підключити",
+      syncError:
+        "Не вдалося підключитися. Перевірте посилання, PIN і правила Firebase.",
+      syncHint: "Введіть PIN, щоб підключити цей календар.",
+      syncPin: "PIN",
+      syncTitle: "Підключити синхронізацію",
       title: "Назва",
       dictateTitle: "Диктувати назву",
       date: "Дата",
@@ -425,7 +466,13 @@ const weekdayWords = {
 let events = loadJson(STORAGE_KEY, []);
 let members = loadJson(MEMBER_KEY, []);
 let settings = loadJson(SETTINGS_KEY, {});
-let memberColors = normalizeMemberColors(settings.memberColors, members);
+let memberColors = normalizeMemberColors(
+  loadJson(MEMBER_COLORS_KEY, settings.memberColors || {}),
+  members,
+);
+let deletedEventIds = normalizeDeletedEventIds(
+  loadJson(DELETED_EVENT_IDS_KEY, {}),
+);
 let language = supportedLanguage(settings.language || navigator.language);
 let viewMode = settings.viewMode === "month" ? "month" : "week";
 let anchorDate = new Date();
@@ -438,11 +485,24 @@ let activeSnap = null;
 let snapSequence = 0;
 let pendingDeleteId = "";
 let suppressCalendarClick = false;
+let firebaseServices = null;
+let syncCalendarKey = localStorage.getItem(SYNC_SECRET_KEY) || "";
+let syncCalendarRef = null;
+let syncUnsubscribe = null;
+let syncConnecting = false;
+let pendingUrlSecretKey = "";
 
-if (Object.prototype.hasOwnProperty.call(settings, "anchorDate")) saveSettings();
+if (
+  Object.prototype.hasOwnProperty.call(settings, "anchorDate") ||
+  Object.prototype.hasOwnProperty.call(settings, "memberColors")
+) {
+  saveSettings();
+}
+saveSharedLocalState();
 
 applyLanguage();
 render();
+startInitialSync();
 window.setInterval(refreshCurrentTimeIndicators, 60 * 1000);
 
 talkButton.addEventListener("click", (event) => {
@@ -498,6 +558,17 @@ document
 document
   .querySelector("#cancelDelete")
   .addEventListener("click", () => confirmDialog.close());
+document.querySelector("#cancelSync").addEventListener("click", () => {
+  pendingUrlSecretKey = "";
+  syncDialog.close();
+});
+
+resetSyncButton.addEventListener("click", resetSync);
+
+syncForm.addEventListener("submit", (event) => {
+  event.preventDefault();
+  connectFromPin();
+});
 
 deleteEvent.addEventListener("click", () => {
   if (!eventId.value) return;
@@ -508,8 +579,11 @@ deleteEvent.addEventListener("click", () => {
 confirmForm.addEventListener("submit", (event) => {
   event.preventDefault();
   if (!pendingDeleteId) return;
+  const deletedAt = Date.now();
   events = events.filter((entry) => entry.id !== pendingDeleteId);
-  saveJson(STORAGE_KEY, events);
+  deletedEventIds[pendingDeleteId] = deletedAt;
+  saveSharedLocalState();
+  syncDeleteEvent(pendingDeleteId, deletedAt);
   pendingDeleteId = "";
   confirmDialog.close();
   eventDialog.close();
@@ -532,6 +606,7 @@ eventForm.addEventListener("submit", (event) => {
     endTime: allDay || !eventTime.value ? "" : eventEndTime.value,
     title: rawTitle || label("untitled"),
     members: selectedMembers,
+    updatedAt: Date.now(),
   };
 
   if (eventId.value) {
@@ -540,7 +615,9 @@ eventForm.addEventListener("submit", (event) => {
     events.push(entry);
   }
 
-  saveJson(STORAGE_KEY, events);
+  delete deletedEventIds[entry.id];
+  saveSharedLocalState();
+  syncUpsertEvent(entry);
   eventDialog.close();
   render();
 });
@@ -550,7 +627,8 @@ settingsForm.addEventListener("submit", (event) => {
   language = languageSelect.value;
   members = parseMemberInput(membersInput.value);
   memberColors = normalizeMemberColors(draftMemberColors, members);
-  saveJson(MEMBER_KEY, members);
+  saveSharedLocalState();
+  syncSharedSettings();
   saveSettings();
   settingsDialog.close();
   applyLanguage();
@@ -1134,7 +1212,10 @@ function stopTitleDictation() {
 function enableTitleEditing() {
   speechText.readOnly = false;
   speechText.focus({ preventScroll: true });
-  speechText.setSelectionRange(speechText.value.length, speechText.value.length);
+  speechText.setSelectionRange(
+    speechText.value.length,
+    speechText.value.length,
+  );
 }
 
 function startDrag(event) {
@@ -1353,10 +1434,7 @@ function getPanelWidth(track) {
 }
 
 function usesSingleWeekPanels() {
-  return (
-    viewMode === "week" &&
-    window.matchMedia?.(SINGLE_WEEK_MEDIA).matches
-  );
+  return viewMode === "week" && window.matchMedia?.(SINGLE_WEEK_MEDIA).matches;
 }
 
 function setTrackOffset(track, offset, panelWidth = getPanelWidth(track)) {
@@ -1395,7 +1473,10 @@ function setWeekTrackProgress(track, rawProgress) {
     panel.style.flexBasis = `${panelWidth}px`;
     panel.style.width = `${panelWidth}px`;
     panel.classList.toggle("calendar-panel-current", panelWidth > previewWidth);
-    panel.classList.toggle("calendar-panel-preview", panelWidth <= previewWidth);
+    panel.classList.toggle(
+      "calendar-panel-preview",
+      panelWidth <= previewWidth,
+    );
     panelWidths.set(offset, panelWidth);
   });
 
@@ -1495,7 +1576,11 @@ function timeFromWeekPoint(dayEl, clientX) {
 
   const startMin = Number(body.dataset.startMin);
   const endMin = Number(body.dataset.endMin);
-  if (!Number.isFinite(startMin) || !Number.isFinite(endMin) || endMin <= startMin)
+  if (
+    !Number.isFinite(startMin) ||
+    !Number.isFinite(endMin) ||
+    endMin <= startMin
+  )
     return "";
 
   const rect = lanes.getBoundingClientRect();
@@ -1586,6 +1671,7 @@ function openSettings() {
   draftMembers = [...members];
   draftMemberColors = normalizeMemberColors(memberColors, draftMembers);
   openDraftColorMember = "";
+  resetSyncButton.disabled = !syncCalendarKey;
   renderSettingsMemberColors();
   settingsDialog.showModal();
   settingsTitle.focus({ preventScroll: true });
@@ -1623,7 +1709,11 @@ function renderSettingsMemberColors() {
         swatch.dataset.member = name;
         swatch.dataset.color = color;
         swatch.style.backgroundColor = color;
-        swatch.disabled = colorUsedByOtherMember(color, name, draftMemberColors);
+        swatch.disabled = colorUsedByOtherMember(
+          color,
+          name,
+          draftMemberColors,
+        );
         if (draftMemberColors[name] === color) {
           swatch.classList.add("selected");
           swatch.setAttribute("aria-current", "true");
@@ -1836,8 +1926,14 @@ function applyLanguage() {
     label("membersInput");
   document.querySelector("#membersInput").placeholder = label("membersInput");
   document.querySelector("#settingsHint").textContent = label("settingsHint");
+  document.querySelector("#resetSync").textContent = label("resetSync");
   document.querySelector("#cancelSettings").textContent = label("cancel");
   document.querySelector("#saveSettings").textContent = label("save");
+  document.querySelector("#syncTitle").textContent = label("syncTitle");
+  document.querySelector("#syncHint").textContent = label("syncHint");
+  document.querySelector("#syncPinLabel").textContent = label("syncPin");
+  document.querySelector("#cancelSync").textContent = label("cancel");
+  document.querySelector("#connectSync").textContent = label("syncConnect");
   document.querySelector("#confirmTitle").textContent = label("deleteTitle");
   document.querySelector("#confirmHint").textContent = label("deleteHint");
   document.querySelector("#cancelDelete").textContent = label("cancel");
@@ -1939,10 +2035,357 @@ function compareEvents(a, b) {
   );
 }
 
+function startInitialSync() {
+  const url = new URL(window.location.href);
+  const urlSecretKey = url.searchParams.get("secretKey") || "";
+
+  if (syncCalendarKey) {
+    connectToSyncCalendar(syncCalendarKey, { persist: true, removeUrl: true });
+    return;
+  }
+
+  if (urlSecretKey) openSyncPinDialog(urlSecretKey);
+}
+
+function openSyncPinDialog(secretKey) {
+  pendingUrlSecretKey = secretKey.trim();
+  syncPin.value = "";
+  setSyncError("");
+  syncDialog.showModal();
+  syncTitle.focus({ preventScroll: true });
+}
+
+async function connectFromPin() {
+  if (!pendingUrlSecretKey || syncConnecting) return;
+  const pin = syncPin.value.trim();
+  if (pin.length !== PIN_LENGTH) {
+    setSyncError(label("syncError"));
+    return;
+  }
+
+  const calendarKey = `${pendingUrlSecretKey}${pin}`;
+  if (!isValidCalendarKey(calendarKey)) {
+    setSyncError(label("syncError"));
+    return;
+  }
+
+  const connected = await connectToSyncCalendar(calendarKey, {
+    persist: true,
+    removeUrl: true,
+    showError: true,
+  });
+  if (!connected) return;
+
+  pendingUrlSecretKey = "";
+  syncDialog.close();
+}
+
+async function connectToSyncCalendar(calendarKey, options = {}) {
+  if (!calendarKey || syncConnecting) return false;
+  syncConnecting = true;
+  document.querySelector("#connectSync").disabled = true;
+  setSyncError("");
+
+  try {
+    const services = await loadFirebaseServices();
+    const calendarRef = services.doc(services.db, "calendars", calendarKey);
+    const snapshot = await services.getDoc(calendarRef);
+
+    if (snapshot.exists()) {
+      applyRemoteCalendar(snapshot.data());
+    } else {
+      await services.setDoc(
+        calendarRef,
+        serializeCalendarState(
+          currentCalendarState(),
+          services.serverTimestamp,
+        ),
+      );
+    }
+
+    syncCalendarKey = calendarKey;
+    syncCalendarRef = calendarRef;
+    if (options.persist) localStorage.setItem(SYNC_SECRET_KEY, calendarKey);
+    if (options.removeUrl) removeSecretKeyFromUrl();
+    startSyncListener(services, calendarRef);
+    return true;
+  } catch (error) {
+    console.error("Calendar sync failed", error);
+    if (options.showError) setSyncError(label("syncError"));
+    return false;
+  } finally {
+    syncConnecting = false;
+    document.querySelector("#connectSync").disabled = false;
+  }
+}
+
+async function loadFirebaseServices() {
+  if (firebaseServices) return firebaseServices;
+  if (!hasFirebaseConfig()) throw new Error("Firebase config is missing.");
+
+  const [{ initializeApp }, firestore] = await Promise.all([
+    import(
+      `https://www.gstatic.com/firebasejs/${FIREBASE_SDK_VERSION}/firebase-app.js`
+    ),
+    import(
+      `https://www.gstatic.com/firebasejs/${FIREBASE_SDK_VERSION}/firebase-firestore.js`
+    ),
+  ]);
+  const app = initializeApp(FIREBASE_CONFIG);
+  firebaseServices = {
+    db: firestore.getFirestore(app),
+    doc: firestore.doc,
+    getDoc: firestore.getDoc,
+    onSnapshot: firestore.onSnapshot,
+    runTransaction: firestore.runTransaction,
+    serverTimestamp: firestore.serverTimestamp,
+    setDoc: firestore.setDoc,
+  };
+  return firebaseServices;
+}
+
+function hasFirebaseConfig() {
+  return Boolean(
+    FIREBASE_CONFIG.apiKey &&
+    FIREBASE_CONFIG.projectId &&
+    FIREBASE_CONFIG.appId,
+  );
+}
+
+function isValidCalendarKey(calendarKey) {
+  return Boolean(calendarKey && !calendarKey.includes("/"));
+}
+
+function startSyncListener(services, calendarRef) {
+  if (syncUnsubscribe) syncUnsubscribe();
+  syncUnsubscribe = services.onSnapshot(
+    calendarRef,
+    (snapshot) => {
+      if (!snapshot.exists()) return;
+      applyRemoteCalendar(snapshot.data());
+    },
+    (error) => {
+      console.error("Calendar sync listener failed", error);
+    },
+  );
+}
+
+function resetSync() {
+  if (syncUnsubscribe) syncUnsubscribe();
+  syncUnsubscribe = null;
+  syncCalendarRef = null;
+  syncCalendarKey = "";
+  pendingUrlSecretKey = "";
+  localStorage.removeItem(SYNC_SECRET_KEY);
+  removeSecretKeyFromUrl();
+  resetSyncButton.disabled = true;
+}
+
+function removeSecretKeyFromUrl() {
+  const url = new URL(window.location.href);
+  if (!url.searchParams.has("secretKey")) return;
+  url.searchParams.delete("secretKey");
+  const nextUrl = `${url.pathname}${url.search}${url.hash}`;
+  window.history.replaceState({}, "", nextUrl);
+}
+
+function setSyncError(message) {
+  syncError.textContent = message;
+  syncError.hidden = !message;
+}
+
+function syncUpsertEvent(entry) {
+  writeCalendarTransaction((remote) => {
+    const deleted = { ...remote.deletedEventIds };
+    if ((deleted[entry.id] || 0) <= entry.updatedAt) delete deleted[entry.id];
+    return {
+      ...remote,
+      events: mergeEventLists(remote.events, [entry], deleted),
+      deletedEventIds: deleted,
+    };
+  });
+}
+
+function syncDeleteEvent(id, deletedAt) {
+  writeCalendarTransaction((remote) => {
+    const deleted = mergeDeletedEventIds(remote.deletedEventIds, {
+      [id]: deletedAt,
+    });
+    return {
+      ...remote,
+      events: mergeEventLists(remote.events, [], deleted),
+      deletedEventIds: deleted,
+    };
+  });
+}
+
+function syncSharedSettings() {
+  writeCalendarTransaction((remote) => {
+    const deleted = mergeDeletedEventIds(
+      remote.deletedEventIds,
+      deletedEventIds,
+    );
+    return {
+      ...remote,
+      events: mergeEventLists(remote.events, events, deleted),
+      members,
+      memberColors,
+      deletedEventIds: deleted,
+    };
+  });
+}
+
+async function writeCalendarTransaction(updateState) {
+  if (!syncCalendarKey) return;
+
+  try {
+    const services = await loadFirebaseServices();
+    if (!syncCalendarRef) {
+      syncCalendarRef = services.doc(services.db, "calendars", syncCalendarKey);
+    }
+
+    await services.runTransaction(services.db, async (transaction) => {
+      const snapshot = await transaction.get(syncCalendarRef);
+      const remote = snapshot.exists()
+        ? normalizeCalendarState(snapshot.data())
+        : emptyCalendarState();
+      const next = updateState(remote);
+      transaction.set(
+        syncCalendarRef,
+        serializeCalendarState(next, services.serverTimestamp),
+      );
+    });
+  } catch (error) {
+    console.error("Calendar sync write failed", error);
+  }
+}
+
+function applyRemoteCalendar(rawData) {
+  const remote = normalizeCalendarState(rawData);
+  deletedEventIds = mergeDeletedEventIds(
+    deletedEventIds,
+    remote.deletedEventIds,
+  );
+  events = mergeEventLists(events, remote.events, deletedEventIds);
+  members = remote.members;
+  memberColors = normalizeMemberColors(remote.memberColors, members);
+  saveSharedLocalState();
+  render();
+}
+
+function currentCalendarState() {
+  return normalizeCalendarState({
+    events,
+    members,
+    memberColors,
+    deletedEventIds,
+  });
+}
+
+function emptyCalendarState() {
+  return {
+    events: [],
+    members: [],
+    memberColors: {},
+    deletedEventIds: {},
+  };
+}
+
+function normalizeCalendarState(rawData) {
+  const data = rawData && typeof rawData === "object" ? rawData : {};
+  const normalizedMembers = normalizeMembers(data.members);
+  return {
+    events: normalizeEvents(data.events),
+    members: normalizedMembers,
+    memberColors: normalizeMemberColors(data.memberColors, normalizedMembers),
+    deletedEventIds: normalizeDeletedEventIds(data.deletedEventIds),
+  };
+}
+
+function normalizeEvents(value) {
+  if (!Array.isArray(value)) return [];
+  return value
+    .filter((entry) => entry && typeof entry === "object" && entry.id)
+    .map((entry) => ({
+      id: String(entry.id),
+      date: typeof entry.date === "string" ? entry.date : "",
+      allDay: Boolean(entry.allDay),
+      time: typeof entry.time === "string" ? entry.time : "",
+      endTime: typeof entry.endTime === "string" ? entry.endTime : "",
+      title: typeof entry.title === "string" ? entry.title : label("untitled"),
+      members: normalizeMembers(entry.members),
+      updatedAt: Number.isFinite(Number(entry.updatedAt))
+        ? Number(entry.updatedAt)
+        : 0,
+    }))
+    .filter((entry) => entry.date);
+}
+
+function normalizeMembers(value) {
+  if (!Array.isArray(value)) return [];
+  return [
+    ...new Set(value.map((name) => String(name || "").trim()).filter(Boolean)),
+  ];
+}
+
+function normalizeDeletedEventIds(value) {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return {};
+  return Object.fromEntries(
+    Object.entries(value)
+      .map(([id, timestamp]) => [id, Number(timestamp)])
+      .filter(([id, timestamp]) => id && Number.isFinite(timestamp)),
+  );
+}
+
+function mergeDeletedEventIds(...sources) {
+  return sources.reduce((result, source) => {
+    Object.entries(normalizeDeletedEventIds(source)).forEach(
+      ([id, timestamp]) => {
+        result[id] = Math.max(result[id] || 0, timestamp);
+      },
+    );
+    return result;
+  }, {});
+}
+
+function mergeEventLists(baseEvents, incomingEvents, deletedIds) {
+  const merged = new Map();
+  [...normalizeEvents(baseEvents), ...normalizeEvents(incomingEvents)].forEach(
+    (entry) => {
+      const saved = merged.get(entry.id);
+      if (!saved || entry.updatedAt >= saved.updatedAt) {
+        merged.set(entry.id, entry);
+      }
+    },
+  );
+
+  return [...merged.values()].filter(
+    (entry) => (deletedIds[entry.id] || 0) < entry.updatedAt,
+  );
+}
+
+function serializeCalendarState(state, serverTimestampValue) {
+  const normalized = normalizeCalendarState(state);
+  return {
+    schemaVersion: 1,
+    events: normalized.events.map((entry) => ({ ...entry })),
+    members: [...normalized.members],
+    memberColors: { ...normalized.memberColors },
+    deletedEventIds: { ...normalized.deletedEventIds },
+    updatedAt: serverTimestampValue(),
+  };
+}
+
+function saveSharedLocalState() {
+  saveJson(STORAGE_KEY, events);
+  saveJson(MEMBER_KEY, members);
+  saveJson(MEMBER_COLORS_KEY, memberColors);
+  saveJson(DELETED_EVENT_IDS_KEY, deletedEventIds);
+}
+
 function saveSettings() {
   saveJson(SETTINGS_KEY, {
     language,
-    memberColors,
     viewMode,
   });
 }
