@@ -154,7 +154,9 @@ const i18n = {
       save: "Speichern",
       settings: "Einstellungen",
       settingsHint: "Daten bleiben in diesem Browser und in den Clouds.",
-      resetSync: "Reset sync",
+      settingsHintLocal:
+        "Data stays in this browser locally until you connect to the calendar by secret key.",
+      resetSync: "Sync zurücksetzen",
       syncSecretKey: "Sync secret key",
       syncSecretLink: "Link",
       syncConnect: "Verbinden",
@@ -246,6 +248,8 @@ const i18n = {
       save: "Save",
       settings: "Settings",
       settingsHint: "Data stays in this browser and in the clouds.",
+      settingsHintLocal:
+        "Data stays in this browser locally until you connect to the calendar by secret key.",
       resetSync: "Reset sync",
       syncSecretKey: "Sync secret key",
       syncSecretLink: "Link",
@@ -337,7 +341,9 @@ const i18n = {
       save: "Зберегти",
       settings: "Налаштування",
       settingsHint: "Дані залишаються в цьому браузері та в хмарах.",
-      resetSync: "Reset sync",
+      settingsHintLocal:
+        "Data stays in this browser locally until you connect to the calendar by secret key.",
+      resetSync: "Скинути синхронізацію",
       syncSecretKey: "Секретний ключ синхронізації",
       syncSecretLink: "Зв'язати",
       syncConnect: "Підключити",
@@ -1952,7 +1958,6 @@ function applyLanguage() {
   document.querySelector("#syncSecretKeyLabel").textContent =
     label("syncSecretKey");
   document.querySelector("#linkSync").textContent = label("syncSecretLink");
-  document.querySelector("#settingsHint").textContent = label("settingsHint");
   document.querySelector("#resetSync").textContent = label("resetSync");
   document.querySelector("#cancelSettings").textContent = label("cancel");
   document.querySelector("#saveSettings").textContent = label("save");
@@ -1965,6 +1970,7 @@ function applyLanguage() {
   document.querySelector("#confirmHint").textContent = label("deleteHint");
   document.querySelector("#cancelDelete").textContent = label("cancel");
   document.querySelector("#confirmDelete").textContent = label("confirmDelete");
+  updateSyncSettingsVisibility();
 }
 
 function supportedLanguage(value) {
@@ -2268,6 +2274,9 @@ function updateSyncSettingsVisibility() {
   const linked = Boolean(syncCalendarKey);
   syncSettings.hidden = linked;
   resetSyncButton.hidden = !linked;
+  document.querySelector("#settingsHint").textContent = label(
+    linked ? "settingsHint" : "settingsHintLocal",
+  );
 }
 
 function syncUpsertEvent(entry) {
