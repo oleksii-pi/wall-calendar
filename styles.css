@@ -626,6 +626,18 @@ textarea {
   gap: 8px;
 }
 
+.settings-sync-status {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.settings-sync-status .hint {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
 .hint {
   margin: 0;
   color: var(--muted);
@@ -645,9 +657,15 @@ menu {
 }
 
 #deleteEvent,
-#confirmDelete,
-#resetSync {
+#confirmDelete {
   margin-right: auto;
+  border-color: #d8b9b9;
+  background: #fff;
+  color: var(--danger);
+}
+
+#resetSync {
+  flex: 0 0 auto;
   border-color: #d8b9b9;
   background: #fff;
   color: var(--danger);

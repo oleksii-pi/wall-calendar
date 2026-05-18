@@ -157,6 +157,10 @@ const i18n = {
       settingsHintLocal:
         "Data stays in this browser locally until you connect to the calendar by secret key.",
       resetSync: "Sync zurücksetzen",
+      resetSyncConfirm: "Zurücksetzen",
+      resetSyncHint:
+        "Dieses Gerät wird von der Cloud-Synchronisierung getrennt. Lokale Daten bleiben erhalten.",
+      resetSyncTitle: "Sync zurücksetzen?",
       syncSecretKey: "Sync secret key",
       syncSecretLink: "Link",
       syncConnect: "Verbinden",
@@ -251,6 +255,10 @@ const i18n = {
       settingsHintLocal:
         "Data stays in this browser locally until you connect to the calendar by secret key.",
       resetSync: "Reset sync",
+      resetSyncConfirm: "Reset",
+      resetSyncHint:
+        "This device will disconnect from cloud sync. Local data stays here.",
+      resetSyncTitle: "Reset sync?",
       syncSecretKey: "Sync secret key",
       syncSecretLink: "Link",
       syncConnect: "Connect",
@@ -344,6 +352,10 @@ const i18n = {
       settingsHintLocal:
         "Data stays in this browser locally until you connect to the calendar by secret key.",
       resetSync: "Скинути синхронізацію",
+      resetSyncConfirm: "Скинути",
+      resetSyncHint:
+        "Цей пристрій буде відключено від хмарної синхронізації. Локальні дані залишаться тут.",
+      resetSyncTitle: "Скинути синхронізацію?",
       syncSecretKey: "Секретний ключ синхронізації",
       syncSecretLink: "Зв'язати",
       syncConnect: "Підключити",
@@ -506,6 +518,7 @@ let drag = null;
 let activeSnap = null;
 let snapSequence = 0;
 let pendingDeleteId = "";
+let pendingConfirmAction = "";
 let suppressCalendarClick = false;
 let firebaseServices = null;
 let syncCalendarKey = localStorage.getItem(SYNC_SECRET_KEY) || "";
@@ -577,15 +590,17 @@ document
 document
   .querySelector("#cancelSettings")
   .addEventListener("click", () => settingsDialog.close());
-document
-  .querySelector("#cancelDelete")
-  .addEventListener("click", () => confirmDialog.close());
+document.querySelector("#cancelDelete").addEventListener("click", () => {
+  pendingConfirmAction = "";
+  pendingDeleteId = "";
+  confirmDialog.close();
+});
 document.querySelector("#cancelSync").addEventListener("click", () => {
   pendingUrlSecretKey = "";
   syncDialog.close();
 });
 
-resetSyncButton.addEventListener("click", resetSync);
+resetSyncButton.addEventListener("click", confirmResetSync);
 linkSyncButton.addEventListener("click", linkSyncFromSettings);
 syncSecretKey.addEventListener("keydown", (event) => {
   if (event.key !== "Enter") return;
@@ -601,21 +616,36 @@ syncForm.addEventListener("submit", (event) => {
 deleteEvent.addEventListener("click", () => {
   if (!eventId.value) return;
   pendingDeleteId = eventId.value;
-  confirmDialog.showModal();
+  openConfirmDialog({
+    action: "delete-event",
+    title: label("deleteTitle"),
+    hint: label("deleteHint"),
+    confirm: label("confirmDelete"),
+  });
 });
 
 confirmForm.addEventListener("submit", (event) => {
   event.preventDefault();
-  if (!pendingDeleteId) return;
-  const deletedAt = Date.now();
-  events = events.filter((entry) => entry.id !== pendingDeleteId);
-  deletedEventIds[pendingDeleteId] = deletedAt;
-  saveSharedLocalState();
-  syncDeleteEvent(pendingDeleteId, deletedAt);
-  pendingDeleteId = "";
-  confirmDialog.close();
-  eventDialog.close();
-  render();
+  if (pendingConfirmAction === "delete-event") {
+    if (!pendingDeleteId) return;
+    const deletedAt = Date.now();
+    events = events.filter((entry) => entry.id !== pendingDeleteId);
+    deletedEventIds[pendingDeleteId] = deletedAt;
+    saveSharedLocalState();
+    syncDeleteEvent(pendingDeleteId, deletedAt);
+    pendingDeleteId = "";
+    pendingConfirmAction = "";
+    confirmDialog.close();
+    eventDialog.close();
+    render();
+    return;
+  }
+
+  if (pendingConfirmAction === "reset-sync") {
+    pendingConfirmAction = "";
+    confirmDialog.close();
+    resetSync();
+  }
 });
 
 eventForm.addEventListener("submit", (event) => {
@@ -1966,10 +1996,20 @@ function applyLanguage() {
   document.querySelector("#syncPinLabel").textContent = label("syncPin");
   document.querySelector("#cancelSync").textContent = label("cancel");
   document.querySelector("#connectSync").textContent = label("syncConnect");
-  document.querySelector("#confirmTitle").textContent = label("deleteTitle");
-  document.querySelector("#confirmHint").textContent = label("deleteHint");
   document.querySelector("#cancelDelete").textContent = label("cancel");
-  document.querySelector("#confirmDelete").textContent = label("confirmDelete");
+  if (pendingConfirmAction === "reset-sync") {
+    setConfirmDialogText({
+      title: label("resetSyncTitle"),
+      hint: label("resetSyncHint"),
+      confirm: label("resetSyncConfirm"),
+    });
+  } else {
+    setConfirmDialogText({
+      title: label("deleteTitle"),
+      hint: label("deleteHint"),
+      confirm: label("confirmDelete"),
+    });
+  }
   updateSyncSettingsVisibility();
 }
 
@@ -2268,6 +2308,29 @@ function setSyncError(message) {
 function setSettingsSyncError(message) {
   settingsSyncError.textContent = message;
   settingsSyncError.hidden = !message;
+}
+
+function confirmResetSync() {
+  if (!syncCalendarKey) return;
+  openConfirmDialog({
+    action: "reset-sync",
+    title: label("resetSyncTitle"),
+    hint: label("resetSyncHint"),
+    confirm: label("resetSyncConfirm"),
+  });
+}
+
+function openConfirmDialog({ action, title, hint, confirm }) {
+  pendingConfirmAction = action;
+  setConfirmDialogText({ title, hint, confirm });
+  confirmDialog.showModal();
+  document.querySelector("#confirmTitle").focus({ preventScroll: true });
+}
+
+function setConfirmDialogText({ title, hint, confirm }) {
+  document.querySelector("#confirmTitle").textContent = title;
+  document.querySelector("#confirmHint").textContent = hint;
+  document.querySelector("#confirmDelete").textContent = confirm;
 }
 
 function updateSyncSettingsVisibility() {
