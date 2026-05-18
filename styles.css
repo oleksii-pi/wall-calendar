@@ -615,6 +615,17 @@ textarea {
   opacity: 0.28;
 }
 
+.sync-settings {
+  display: grid;
+  gap: 6px;
+}
+
+.sync-link-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 8px;
+}
+
 .hint {
   margin: 0;
   color: var(--muted);
@@ -643,6 +654,11 @@ menu {
 }
 
 #deleteEvent[hidden] {
+  display: none;
+}
+
+#resetSync[hidden],
+.sync-settings[hidden] {
   display: none;
 }
 

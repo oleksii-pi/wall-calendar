@@ -80,6 +80,16 @@
           <input id="membersInput" type="text" placeholder="Adult, child">
         </label>
         <div id="memberColorSettings" class="member-color-settings"></div>
+        <div id="syncSettings" class="sync-settings">
+          <label>
+            <span id="syncSecretKeyLabel">Sync secret key</span>
+            <div class="sync-link-row">
+              <input id="syncSecretKey" type="text" autocomplete="off" autocapitalize="off" spellcheck="false">
+              <button id="linkSync" type="button">Link</button>
+            </div>
+          </label>
+          <p class="hint sync-error" id="settingsSyncError" hidden></p>
+        </div>
         <p class="hint" id="settingsHint">Data stays in this browser and in the clouds.</p>
         <menu>
           <button value="reset-sync" type="button" id="resetSync">Reset sync</button>

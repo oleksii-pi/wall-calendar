@@ -86,8 +86,12 @@ const memberColorSettings = document.querySelector("#memberColorSettings");
 const languageSelect = document.querySelector("#languageSelect");
 const deleteEvent = document.querySelector("#deleteEvent");
 const resetSyncButton = document.querySelector("#resetSync");
+const syncSettings = document.querySelector("#syncSettings");
+const syncSecretKey = document.querySelector("#syncSecretKey");
+const linkSyncButton = document.querySelector("#linkSync");
 const syncPin = document.querySelector("#syncPin");
 const syncError = document.querySelector("#syncError");
+const settingsSyncError = document.querySelector("#settingsSyncError");
 
 const i18n = {
   de: {
@@ -151,9 +155,13 @@ const i18n = {
       settings: "Einstellungen",
       settingsHint: "Daten bleiben in diesem Browser und in den Clouds.",
       resetSync: "Reset sync",
+      syncSecretKey: "Sync secret key",
+      syncSecretLink: "Link",
       syncConnect: "Verbinden",
       syncError:
         "Verbindung fehlgeschlagen. Prüfe Link, PIN und Firebase-Regeln.",
+      syncSecretError:
+        "Verbindung fehlgeschlagen. Prüfe Secret Key und Firebase-Regeln.",
       syncHint: "PIN eingeben, um diesen Kalender zu verbinden.",
       syncPin: "PIN",
       syncTitle: "Synchronisierung verbinden",
@@ -239,8 +247,12 @@ const i18n = {
       settings: "Settings",
       settingsHint: "Data stays in this browser and in the clouds.",
       resetSync: "Reset sync",
+      syncSecretKey: "Sync secret key",
+      syncSecretLink: "Link",
       syncConnect: "Connect",
       syncError: "Connection failed. Check the link, PIN, and Firebase rules.",
+      syncSecretError:
+        "Connection failed. Check the secret key and Firebase rules.",
       syncHint: "Enter the PIN to connect this calendar.",
       syncPin: "PIN",
       syncTitle: "Connect sync",
@@ -326,9 +338,13 @@ const i18n = {
       settings: "Налаштування",
       settingsHint: "Дані залишаються в цьому браузері та в хмарах.",
       resetSync: "Reset sync",
+      syncSecretKey: "Секретний ключ синхронізації",
+      syncSecretLink: "Зв'язати",
       syncConnect: "Підключити",
       syncError:
         "Не вдалося підключитися. Перевірте посилання, PIN і правила Firebase.",
+      syncSecretError:
+        "Не вдалося підключитися. Перевірте секретний ключ і правила Firebase.",
       syncHint: "Введіть PIN, щоб підключити цей календар.",
       syncPin: "PIN",
       syncTitle: "Підключити синхронізацію",
@@ -564,6 +580,12 @@ document.querySelector("#cancelSync").addEventListener("click", () => {
 });
 
 resetSyncButton.addEventListener("click", resetSync);
+linkSyncButton.addEventListener("click", linkSyncFromSettings);
+syncSecretKey.addEventListener("keydown", (event) => {
+  if (event.key !== "Enter") return;
+  event.preventDefault();
+  linkSyncFromSettings();
+});
 
 syncForm.addEventListener("submit", (event) => {
   event.preventDefault();
@@ -1671,7 +1693,9 @@ function openSettings() {
   draftMembers = [...members];
   draftMemberColors = normalizeMemberColors(memberColors, draftMembers);
   openDraftColorMember = "";
-  resetSyncButton.disabled = !syncCalendarKey;
+  syncSecretKey.value = "";
+  setSettingsSyncError("");
+  updateSyncSettingsVisibility();
   renderSettingsMemberColors();
   settingsDialog.showModal();
   settingsTitle.focus({ preventScroll: true });
@@ -1925,6 +1949,9 @@ function applyLanguage() {
   document.querySelector("#membersInputLabel").textContent =
     label("membersInput");
   document.querySelector("#membersInput").placeholder = label("membersInput");
+  document.querySelector("#syncSecretKeyLabel").textContent =
+    label("syncSecretKey");
+  document.querySelector("#linkSync").textContent = label("syncSecretLink");
   document.querySelector("#settingsHint").textContent = label("settingsHint");
   document.querySelector("#resetSync").textContent = label("resetSync");
   document.querySelector("#cancelSettings").textContent = label("cancel");
@@ -2080,6 +2107,31 @@ async function connectFromPin() {
   syncDialog.close();
 }
 
+async function linkSyncFromSettings() {
+  if (syncConnecting) return;
+  const calendarKey = parseSecretKeyInput(syncSecretKey.value);
+  if (!isValidCalendarKey(calendarKey)) {
+    setSettingsSyncError(label("syncSecretError"));
+    return;
+  }
+
+  linkSyncButton.disabled = true;
+  setSettingsSyncError("");
+  const connected = await connectToSyncCalendar(calendarKey, {
+    persist: true,
+    removeUrl: true,
+  });
+  linkSyncButton.disabled = false;
+
+  if (!connected) {
+    setSettingsSyncError(label("syncSecretError"));
+    return;
+  }
+
+  syncSecretKey.value = "";
+  updateSyncSettingsVisibility();
+}
+
 async function connectToSyncCalendar(calendarKey, options = {}) {
   if (!calendarKey || syncConnecting) return false;
   syncConnecting = true;
@@ -2107,6 +2159,7 @@ async function connectToSyncCalendar(calendarKey, options = {}) {
     syncCalendarRef = calendarRef;
     if (options.persist) localStorage.setItem(SYNC_SECRET_KEY, calendarKey);
     if (options.removeUrl) removeSecretKeyFromUrl();
+    updateSyncSettingsVisibility();
     startSyncListener(services, calendarRef);
     return true;
   } catch (error) {
@@ -2156,6 +2209,18 @@ function isValidCalendarKey(calendarKey) {
   return Boolean(calendarKey && !calendarKey.includes("/"));
 }
 
+function parseSecretKeyInput(value) {
+  const trimmed = value.trim();
+  if (!trimmed) return "";
+
+  try {
+    const url = new URL(trimmed, window.location.href);
+    return (url.searchParams.get("secretKey") || trimmed).trim();
+  } catch {
+    return trimmed;
+  }
+}
+
 function startSyncListener(services, calendarRef) {
   if (syncUnsubscribe) syncUnsubscribe();
   syncUnsubscribe = services.onSnapshot(
@@ -2178,7 +2243,7 @@ function resetSync() {
   pendingUrlSecretKey = "";
   localStorage.removeItem(SYNC_SECRET_KEY);
   removeSecretKeyFromUrl();
-  resetSyncButton.disabled = true;
+  updateSyncSettingsVisibility();
 }
 
 function removeSecretKeyFromUrl() {
@@ -2192,6 +2257,17 @@ function removeSecretKeyFromUrl() {
 function setSyncError(message) {
   syncError.textContent = message;
   syncError.hidden = !message;
+}
+
+function setSettingsSyncError(message) {
+  settingsSyncError.textContent = message;
+  settingsSyncError.hidden = !message;
+}
+
+function updateSyncSettingsVisibility() {
+  const linked = Boolean(syncCalendarKey);
+  syncSettings.hidden = linked;
+  resetSyncButton.hidden = !linked;
 }
 
 function syncUpsertEvent(entry) {
