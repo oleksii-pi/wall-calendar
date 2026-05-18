@@ -673,15 +673,9 @@ eventForm.addEventListener("submit", (event) => {
 
 settingsForm.addEventListener("submit", (event) => {
   event.preventDefault();
-  language = languageSelect.value;
-  members = parseMemberInput(membersInput.value);
-  memberColors = normalizeMemberColors(draftMemberColors, members);
-  saveSharedLocalState();
+  commitSettingsFormState();
   syncSharedSettings();
-  saveSettings();
   settingsDialog.close();
-  applyLanguage();
-  render();
 });
 
 membersInput.addEventListener("input", () => {
@@ -1977,17 +1971,31 @@ function formatTimeRange(entry) {
 }
 
 function openSettings() {
+  updateSettingsFormFromState();
+  syncSecretKey.value = "";
+  setSettingsSyncError("");
+  updateSyncSettingsVisibility();
+  settingsDialog.showModal();
+  settingsTitle.focus({ preventScroll: true });
+}
+
+function updateSettingsFormFromState() {
   languageSelect.value = language;
   membersInput.value = members.join(", ");
   draftMembers = [...members];
   draftMemberColors = normalizeMemberColors(memberColors, draftMembers);
   openDraftColorMember = "";
-  syncSecretKey.value = "";
-  setSettingsSyncError("");
-  updateSyncSettingsVisibility();
   renderSettingsMemberColors();
-  settingsDialog.showModal();
-  settingsTitle.focus({ preventScroll: true });
+}
+
+function commitSettingsFormState() {
+  language = languageSelect.value;
+  members = parseMemberInput(membersInput.value);
+  memberColors = normalizeMemberColors(draftMemberColors, members);
+  saveSharedLocalState();
+  saveSettings();
+  applyLanguage();
+  render();
 }
 
 function renderSettingsMemberColors() {
@@ -2409,6 +2417,7 @@ async function linkSyncFromSettings() {
     return;
   }
 
+  commitSettingsFormState();
   linkSyncButton.disabled = true;
   setSettingsSyncError("");
   const connected = await connectToSyncCalendar(calendarKey, {
@@ -2423,6 +2432,7 @@ async function linkSyncFromSettings() {
   }
 
   syncSecretKey.value = "";
+  updateSettingsFormFromState();
   updateSyncSettingsVisibility();
 }
 
