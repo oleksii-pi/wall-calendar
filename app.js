@@ -959,7 +959,12 @@ function renderDaySchedule(dayEvents, day) {
   const hourRange = dayHourRange(timed, currentTimeMin);
 
   const body = document.createElement("div");
-  body.className = "single-day-body";
+  body.className = [
+    "single-day-body",
+    allDay.length > 0 ? "has-all-day" : "",
+  ]
+    .filter(Boolean)
+    .join(" ");
   body.dataset.date = toDateKey(day);
   body.dataset.startMin = String(hourRange.startMin);
   body.dataset.endMin = String(hourRange.endMin);

@@ -174,12 +174,16 @@ body {
 
 .single-day-body {
   display: grid;
-  grid-template-rows: auto minmax(0, 1fr);
+  grid-template-rows: minmax(0, 1fr);
   gap: 6px;
   min-width: 0;
   min-height: 0;
   padding: 8px 10px 10px;
   overflow: hidden;
+}
+
+.single-day-body.has-all-day {
+  grid-template-rows: auto minmax(0, 1fr);
 }
 
 .single-day-all-day {
