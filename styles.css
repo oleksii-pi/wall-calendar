@@ -977,10 +977,6 @@ button[type="submit"]:not(#confirmDelete) {
     font-size: 26px;
   }
 
-  .day-body {
-    padding: 5px 6px;
-  }
-
   .single-day-header {
     padding: 8px 10px;
   }
