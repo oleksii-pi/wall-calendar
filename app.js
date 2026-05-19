@@ -738,6 +738,16 @@ function setViewMode(nextMode) {
   render();
 }
 
+function openDayViewForDate(dateKey) {
+  const date = parseDateKey(dateKey);
+  if (!date) return;
+  viewMode = "day";
+  anchorDate = startOfDay(date);
+  appMenu.hidden = true;
+  saveSettings();
+  render();
+}
+
 function render() {
   calendar.className = `calendar ${viewMode}-view`;
   calendar.innerHTML = "";
@@ -873,7 +883,26 @@ function renderWeek(monday) {
 
     const dateEl = document.createElement("div");
     dateEl.className = "date";
-    dateEl.innerHTML = `<span class="weekday">${t().weekdays[day.getDay()]}</span><span class="number">${day.getDate()}</span>`;
+
+    const dateButton = document.createElement("button");
+    dateButton.className = "date-button";
+    dateButton.type = "button";
+    dateButton.setAttribute(
+      "aria-label",
+      `${t().weekdays[day.getDay()]} ${day.getDate()}`,
+    );
+    dateButton.addEventListener("click", () => openDayViewForDate(dateKey));
+
+    const weekday = document.createElement("span");
+    weekday.className = "weekday";
+    weekday.textContent = t().weekdays[day.getDay()];
+
+    const number = document.createElement("span");
+    number.className = "number";
+    number.textContent = day.getDate();
+
+    dateButton.append(weekday, number);
+    dateEl.append(dateButton);
 
     dayEl.append(
       dateEl,
@@ -2361,6 +2390,12 @@ function sameDate(a, b) {
 
 function toDateKey(date) {
   return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
+}
+
+function parseDateKey(dateKey) {
+  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(dateKey);
+  if (!match) return null;
+  return new Date(Number(match[1]), Number(match[2]) - 1, Number(match[3]));
 }
 
 function compareEvents(a, b) {
