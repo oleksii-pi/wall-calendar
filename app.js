@@ -5,6 +5,9 @@ const SETTINGS_KEY = "wallCalendarSettingsV1";
 const DELETED_EVENT_IDS_KEY = "wallCalendarDeletedEventIdsV1";
 const SYNC_SECRET_KEY = "wallCalendarSyncSecretV1";
 const FIREBASE_SDK_VERSION = "12.13.0";
+const HOLIDAY_COUNTRIES_CACHE_KEY = "wallCalendarHolidayCountriesV1";
+const HOLIDAY_DATA_CACHE_KEY = "wallCalendarHolidayDataV1";
+const HOLIDAY_API_BASE = "https://date.nager.at/api/v3";
 
 const FIREBASE_CONFIG = {
   apiKey: "AIzaSyDEP9NCH4n53DKO3uBm4uZODsfBWSph4_8",
@@ -84,6 +87,7 @@ const VIEW_MODES = ["day", "week", "month"];
 const membersInput = document.querySelector("#membersInput");
 const memberColorSettings = document.querySelector("#memberColorSettings");
 const languageSelect = document.querySelector("#languageSelect");
+const holidayCountrySelect = document.querySelector("#holidayCountrySelect");
 const deleteEvent = document.querySelector("#deleteEvent");
 const resetSyncButton = document.querySelector("#resetSync");
 const syncSettings = document.querySelector("#syncSettings");
@@ -169,17 +173,8 @@ const i18n = {
       allDay: "Ganztägig",
       type: "Typ",
       untitled: "Neuer Termin",
-    },
-    holidayNames: {
-      newYear: "Neujahr",
-      labor: "Tag der Arbeit",
-      unity: "Tag der Deutschen Einheit",
-      christmas1: "Weihnachten",
-      christmas2: "Weihnachten",
-      goodFriday: "Karfreitag",
-      easterMonday: "Ostermontag",
-      ascension: "Christi Himmelfahrt",
-      pentecost: "Pfingstmontag",
+      holidayCountry: "Feiertage",
+      noHolidayCountry: "Keine Feiertage",
     },
   },
   en: {
@@ -259,17 +254,8 @@ const i18n = {
       allDay: "Full day",
       type: "Type",
       untitled: "New event",
-    },
-    holidayNames: {
-      newYear: "New Year",
-      labor: "Labor Day",
-      unity: "Unity Day",
-      christmas1: "Christmas",
-      christmas2: "Christmas",
-      goodFriday: "Good Friday",
-      easterMonday: "Easter Monday",
-      ascension: "Ascension Day",
-      pentecost: "Whit Monday",
+      holidayCountry: "Public holidays",
+      noHolidayCountry: "No public holidays",
     },
   },
   uk: {
@@ -349,17 +335,8 @@ const i18n = {
       allDay: "Цілий день",
       type: "Тип",
       untitled: "Нова подія",
-    },
-    holidayNames: {
-      newYear: "Новий рік",
-      labor: "День праці",
-      unity: "День єдності",
-      christmas1: "Різдво",
-      christmas2: "Різдво",
-      goodFriday: "Страсна п'ятниця",
-      easterMonday: "Великодній понеділок",
-      ascension: "Вознесіння",
-      pentecost: "Трійця",
+      holidayCountry: "Державні свята",
+      noHolidayCountry: "Без державних свят",
     },
   },
 };
@@ -484,6 +461,14 @@ let deletedEventIds = normalizeDeletedEventIds(
 );
 let language = supportedLanguage(settings.language || navigator.language);
 let viewMode = normalizeViewMode(settings.viewMode);
+let holidayCountry = normalizeHolidayCountry(settings.holidayCountry);
+let holidayCountries = normalizeHolidayCountries(
+  loadJson(HOLIDAY_COUNTRIES_CACHE_KEY, []),
+);
+let holidayCache = new Map(
+  Object.entries(normalizeHolidayDataCache(loadJson(HOLIDAY_DATA_CACHE_KEY, {}))),
+);
+let holidayRequests = new Set();
 let anchorDate = new Date();
 let draftMembers = [];
 let draftMemberColors = {};
@@ -510,6 +495,7 @@ if (
 saveSharedLocalState();
 
 applyLanguage();
+loadHolidayCountries();
 render();
 startInitialSync();
 window.setInterval(refreshCurrentTimeIndicators, 60 * 1000);
@@ -724,21 +710,25 @@ function render() {
   const base = viewBaseDate(anchorDate);
   const stepDate = viewStepDate();
   const renderer = viewRenderer();
+  const panelDates = [];
 
   for (let offset = -2; offset <= 3; offset++) {
+    const panelDate = stepDate(base, offset);
+    panelDates.push(panelDate);
     const panel = document.createElement("div");
     panel.className =
       offset >= 0 && offset <= 1
         ? "calendar-panel"
         : "calendar-panel calendar-panel-buffer";
     panel.dataset.panelOffset = String(offset);
-    panel.append(renderer(stepDate(base, offset)));
+    panel.append(renderer(panelDate));
     track.append(panel);
   }
 
   calendar.append(track);
   refreshTrackLayout();
   refreshCurrentTimeIndicators();
+  loadHolidayYearsForPanelDates(panelDates);
 
   updateMenuLabels();
 }
@@ -784,7 +774,8 @@ function updateMenuLabels() {
 
 function renderDay(day) {
   const dateKey = toDateKey(day);
-  const holidayKeys = new Set(holidayEvents([day]).map((entry) => entry.date));
+  const dayHolidays = holidaysForDays([day]);
+  const holidayKeys = new Set(dayHolidays.map((entry) => entry.date));
   const dayEvents = events
     .filter((entry) => entry.date === dateKey)
     .sort(compareEvents);
@@ -815,13 +806,21 @@ function renderDay(day) {
   title.textContent = `${standaloneMonthName(day.getMonth())} ${day.getFullYear()}`;
 
   header.append(weekday, number, title);
+  if (dayHolidays.length > 0) {
+    const holidayList = document.createElement("div");
+    holidayList.className = "single-day-holidays";
+    holidayList.textContent = dayHolidays
+      .map((entry) => entry.localName || entry.name)
+      .join(", ");
+    header.append(holidayList);
+  }
   view.append(header, renderDaySchedule(dayEvents, day));
   return view;
 }
 
 function renderWeek(monday) {
   const days = Array.from({ length: 7 }, (_, index) => addDays(monday, index));
-  const holidayKeys = new Set(holidayEvents(days).map((entry) => entry.date));
+  const holidayKeys = new Set(holidaysForDays(days).map((entry) => entry.date));
   const visible = new Set(days.map(toDateKey));
   const visibleEvents = events
     .filter((entry) => visible.has(entry.date))
@@ -901,7 +900,7 @@ function renderMonth(monthDate) {
   const days = Array.from({ length: 42 }, (_, index) =>
     addDays(firstCell, index),
   );
-  const holidayKeys = new Set(holidayEvents(days).map((entry) => entry.date));
+  const holidayKeys = new Set(holidaysForDays(days).map((entry) => entry.date));
   days.forEach((day) => {
     const dateKey = toDateKey(day);
     const dayEvents = events
@@ -1981,6 +1980,8 @@ function openSettings() {
 
 function updateSettingsFormFromState() {
   languageSelect.value = language;
+  renderHolidayCountryOptions();
+  holidayCountrySelect.value = holidayCountry;
   membersInput.value = members.join(", ");
   draftMembers = [...members];
   draftMemberColors = normalizeMemberColors(memberColors, draftMembers);
@@ -1990,12 +1991,19 @@ function updateSettingsFormFromState() {
 
 function commitSettingsFormState() {
   language = languageSelect.value;
+  const nextHolidayCountry = normalizeHolidayCountry(holidayCountrySelect.value);
+  const holidayCountryChanged = nextHolidayCountry !== holidayCountry;
+  holidayCountry = nextHolidayCountry;
+  if (holidayCountryChanged) {
+    holidayRequests = new Set();
+  }
   members = parseMemberInput(membersInput.value);
   memberColors = normalizeMemberColors(draftMemberColors, members);
   saveSharedLocalState();
   saveSettings();
   applyLanguage();
   render();
+  if (holidayCountryChanged) loadSelectedHolidayYears();
 }
 
 function renderSettingsMemberColors() {
@@ -2189,33 +2197,179 @@ function titleCleaners() {
   ];
 }
 
-function holidayEvents(days) {
-  const years = [...new Set(days.map((day) => day.getFullYear()))];
-  const names = t().holidayNames;
-  const holidays = years.flatMap((year) => {
-    const easter = getEasterDate(year);
-    return [
-      holiday(year, 0, 1, names.newYear),
-      holiday(year, 4, 1, names.labor),
-      holiday(year, 9, 3, names.unity),
-      holiday(year, 11, 25, names.christmas1),
-      holiday(year, 11, 26, names.christmas2),
-      datedHoliday(addDays(easter, -2), names.goodFriday),
-      datedHoliday(addDays(easter, 1), names.easterMonday),
-      datedHoliday(addDays(easter, 39), names.ascension),
-      datedHoliday(addDays(easter, 50), names.pentecost),
-    ];
-  });
+function holidaysForDays(days) {
+  if (!holidayCountry) return [];
   const visible = new Set(days.map(toDateKey));
-  return holidays.filter((entry) => visible.has(entry.date));
+  const years = [...new Set(days.map((day) => day.getFullYear()))];
+  return years
+    .flatMap(
+      (year) => holidayCache.get(holidayCacheKey(holidayCountry, year)) || [],
+    )
+    .filter((entry) => visible.has(entry.date));
 }
 
-function holiday(year, month, day, title) {
-  return datedHoliday(new Date(year, month, day), title);
+function loadSelectedHolidayYears(options = {}) {
+  if (!holidayCountry) return;
+  [anchorDate.getFullYear()].forEach((year) =>
+    fetchHolidayYear(holidayCountry, year, options),
+  );
 }
 
-function datedHoliday(date, title) {
-  return { date: toDateKey(date), title };
+function loadHolidayYearsForPanelDates(panelDates) {
+  if (!holidayCountry) return;
+  yearsForPanelDates(panelDates).forEach((year) =>
+    fetchHolidayYear(holidayCountry, year),
+  );
+}
+
+function yearsForPanelDates(panelDates) {
+  const dates = panelDates.flatMap((date) => dateRangeForView(date));
+  return [...new Set(dates.map((date) => date.getFullYear()))];
+}
+
+function dateRangeForView(date) {
+  if (viewMode === "month") {
+    const firstCell = startOfWeek(
+      new Date(date.getFullYear(), date.getMonth(), 1),
+    );
+    return [firstCell, addDays(firstCell, 41)];
+  }
+
+  if (viewMode === "week") return [date, addDays(date, 6)];
+
+  return [date];
+}
+
+async function fetchHolidayYear(country, year, options = {}) {
+  const key = holidayCacheKey(country, year);
+  if (
+    !country ||
+    holidayRequests.has(key) ||
+    (!options.force && holidayCache.has(key))
+  )
+    return;
+
+  holidayRequests.add(key);
+  try {
+    const response = await fetch(
+      `${HOLIDAY_API_BASE}/PublicHolidays/${year}/${country}`,
+    );
+    if (!response.ok) throw new Error(`Holiday API returned ${response.status}`);
+    const records = await response.json();
+    holidayCache.set(key, normalizeHolidayEvents(records));
+    saveHolidayCache();
+    if (country === holidayCountry) render();
+  } catch (error) {
+    console.error("Holiday fetch failed", error);
+  } finally {
+    holidayRequests.delete(key);
+  }
+}
+
+function normalizeHolidayEvents(value) {
+  if (!Array.isArray(value)) return [];
+  return value
+    .filter((entry) => entry && typeof entry === "object")
+    .filter((entry) => entry.global !== false)
+    .filter(
+      (entry) => !Array.isArray(entry.types) || entry.types.includes("Public"),
+    )
+    .map((entry) => ({
+      date: typeof entry.date === "string" ? entry.date : "",
+      localName:
+        typeof entry.localName === "string" && entry.localName.trim()
+          ? entry.localName.trim()
+          : "",
+      name:
+        typeof entry.name === "string" && entry.name.trim()
+          ? entry.name.trim()
+          : "",
+    }))
+    .filter((entry) => entry.date && (entry.localName || entry.name))
+    .sort((a, b) => a.date.localeCompare(b.date));
+}
+
+async function loadHolidayCountries() {
+  if (holidayCountries.length > 0) {
+    renderHolidayCountryOptions();
+    return;
+  }
+
+  try {
+    const response = await fetch(`${HOLIDAY_API_BASE}/AvailableCountries`);
+    if (!response.ok)
+      throw new Error(`Holiday countries API returned ${response.status}`);
+    holidayCountries = normalizeHolidayCountries(await response.json());
+    saveJson(HOLIDAY_COUNTRIES_CACHE_KEY, holidayCountries);
+    renderHolidayCountryOptions();
+  } catch (error) {
+    console.error("Holiday countries fetch failed", error);
+    renderHolidayCountryOptions();
+  }
+}
+
+function renderHolidayCountryOptions() {
+  const countries = holidayCountries;
+  const selectedExists = countries.some(
+    (entry) => entry.countryCode === holidayCountry,
+  );
+  const options =
+    !holidayCountry || selectedExists
+      ? countries
+      : [{ countryCode: holidayCountry, name: holidayCountry }, ...countries];
+
+  holidayCountrySelect.innerHTML = "";
+  const emptyOption = document.createElement("option");
+  emptyOption.value = "";
+  emptyOption.textContent = label("noHolidayCountry");
+  holidayCountrySelect.append(emptyOption);
+
+  options.forEach((entry) => {
+    const option = document.createElement("option");
+    option.value = entry.countryCode;
+    option.textContent = entry.name;
+    holidayCountrySelect.append(option);
+  });
+  holidayCountrySelect.value = holidayCountry;
+}
+
+function normalizeHolidayCountries(value) {
+  if (!Array.isArray(value)) return [];
+  return value
+    .filter((entry) => entry && typeof entry === "object")
+    .map((entry) => ({
+      countryCode: normalizeHolidayCountry(entry.countryCode),
+      name:
+        typeof entry.name === "string" && entry.name.trim()
+          ? entry.name.trim()
+          : normalizeHolidayCountry(entry.countryCode),
+    }))
+    .filter((entry) => entry.countryCode)
+    .sort((a, b) => a.name.localeCompare(b.name));
+}
+
+function normalizeHolidayCountry(value) {
+  const code = String(value || "")
+    .trim()
+    .toUpperCase();
+  return /^[A-Z]{2}$/.test(code) ? code : "";
+}
+
+function normalizeHolidayDataCache(value) {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return {};
+  return Object.fromEntries(
+    Object.entries(value)
+      .map(([key, records]) => [key, normalizeHolidayEvents(records)])
+      .filter(([key]) => /^[A-Z]{2}-\d{4}$/.test(key)),
+  );
+}
+
+function saveHolidayCache() {
+  saveJson(HOLIDAY_DATA_CACHE_KEY, Object.fromEntries(holidayCache));
+}
+
+function holidayCacheKey(country, year) {
+  return `${country}-${year}`;
 }
 
 function applyLanguage() {
@@ -2234,6 +2388,8 @@ function applyLanguage() {
   document.querySelector("#saveEvent").textContent = label("add");
   document.querySelector("#settingsTitle").textContent = label("settings");
   document.querySelector("#languageLabel").textContent = label("language");
+  document.querySelector("#holidayCountryLabel").textContent =
+    label("holidayCountry");
   document.querySelector("#membersInputLabel").textContent =
     label("membersInput");
   document.querySelector("#membersInput").placeholder = label("membersInput");
@@ -2304,24 +2460,6 @@ function normalize(value) {
     .replace(/\p{Diacritic}/gu, "")
     .replace(/\s+/g, " ")
     .trim();
-}
-
-function getEasterDate(year) {
-  const a = year % 19;
-  const b = Math.floor(year / 100);
-  const c = year % 100;
-  const d = Math.floor(b / 4);
-  const e = b % 4;
-  const f = Math.floor((b + 8) / 25);
-  const g = Math.floor((b - f + 1) / 3);
-  const h = (19 * a + b - d - g + 15) % 30;
-  const i = Math.floor(c / 4);
-  const k = c % 4;
-  const l = (32 + 2 * e + 2 * i - h - k) % 7;
-  const m = Math.floor((a + 11 * h + 22 * l) / 451);
-  const month = Math.floor((h + l - 7 * m + 114) / 31) - 1;
-  const day = ((h + l - 7 * m + 114) % 31) + 1;
-  return new Date(year, month, day);
 }
 
 function startOfWeek(date) {
@@ -2722,6 +2860,7 @@ function saveSettings() {
   saveJson(SETTINGS_KEY, {
     language,
     viewMode,
+    holidayCountry,
   });
 }
 

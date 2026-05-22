@@ -137,7 +137,7 @@ body {
 
 .single-day-header {
   display: grid;
-  grid-template-columns: auto auto minmax(0, 1fr);
+  grid-template-columns: auto auto minmax(0, 1fr) minmax(120px, auto);
   align-items: baseline;
   gap: 10px;
   min-width: 0;
@@ -163,6 +163,17 @@ body {
   color: var(--muted);
   font-size: clamp(14px, 1.4vw, 20px);
   font-weight: 650;
+  overflow-wrap: anywhere;
+}
+
+.single-day-holidays {
+  justify-self: end;
+  min-width: 0;
+  max-width: min(40vw, 360px);
+  color: var(--danger);
+  font-size: clamp(13px, 1.2vw, 18px);
+  font-weight: 700;
+  text-align: right;
   overflow-wrap: anywhere;
 }
 
@@ -978,7 +989,15 @@ button[type="submit"]:not(#confirmDelete) {
   }
 
   .single-day-header {
+    grid-template-columns: auto auto minmax(0, 1fr);
     padding: 8px 10px;
+  }
+
+  .single-day-holidays {
+    grid-column: 1 / -1;
+    justify-self: end;
+    max-width: 100%;
+    font-size: 13px;
   }
 
   .single-day-body {
