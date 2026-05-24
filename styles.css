@@ -995,15 +995,23 @@ button[type="submit"]:not(#confirmDelete) {
   }
 
   .single-day-header {
-    grid-template-columns: auto auto minmax(0, 1fr);
+    grid-template-columns: auto auto max-content minmax(0, 1fr);
+    gap: 8px;
     padding: 8px 10px;
   }
 
+  .single-day-title {
+    overflow-wrap: normal;
+    white-space: nowrap;
+  }
+
   .single-day-holidays {
-    grid-column: 1 / -1;
     justify-self: end;
-    max-width: 100%;
+    max-width: 42vw;
     font-size: 13px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
   }
 
   .single-day-body {
