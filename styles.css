@@ -177,6 +177,12 @@ body {
   overflow-wrap: anywhere;
 }
 
+.single-day-holidays a {
+  color: inherit;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
 .single-day.special .single-day-weekday,
 .single-day.special .single-day-number {
   color: var(--danger);

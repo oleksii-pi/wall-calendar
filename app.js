@@ -809,9 +809,14 @@ function renderDay(day) {
   if (dayHolidays.length > 0) {
     const holidayList = document.createElement("div");
     holidayList.className = "single-day-holidays";
-    holidayList.textContent = dayHolidays
-      .map((entry) => entry.localName || entry.name)
-      .join(", ");
+    dayHolidays.forEach((entry, index) => {
+      const name = entry.localName || entry.name;
+      const link = document.createElement("a");
+      link.href = holidaySearchUrl(name);
+      link.textContent = name;
+      if (index > 0) holidayList.append(document.createTextNode(", "));
+      holidayList.append(link);
+    });
     header.append(holidayList);
   }
   view.append(header, renderDaySchedule(dayEvents, day));
@@ -1196,7 +1201,13 @@ function renderEventBar(entry, options = {}) {
   bar.type = "button";
   bar.className = options.fullDay ? "event-bar fullday" : "event-bar";
   if (options.month) bar.classList.add("month-event-bar");
-  bar.addEventListener("click", () => openExistingEvent(entry));
+  bar.addEventListener("click", (event) => {
+    if (suppressCalendarClick) {
+      event.preventDefault();
+      return;
+    }
+    openExistingEvent(entry);
+  });
   bar.style.background = eventBackground(entry);
 
   const timeText = formatTimeRange(entry);
@@ -1489,7 +1500,12 @@ function enableTitleEditing() {
 function startDrag(event) {
   if (!usesSwipeTrack()) return;
   if (event.pointerType === "mouse" && event.button !== 0) return;
-  if (event.target.closest("button, input, select, textarea, dialog")) return;
+  const startedOnEvent = Boolean(event.target.closest(".event-bar"));
+  if (
+    event.target.closest("input, select, textarea, dialog, a") ||
+    (event.target.closest("button") && !startedOnEvent)
+  )
+    return;
   completeActiveSnap();
   const track = calendar.querySelector(".calendar-track");
   if (!track) return;
@@ -1503,7 +1519,8 @@ function startDrag(event) {
     deltaY: 0,
     panelWidth,
     track,
-    newEvent: newEventFromPointer(event),
+    startedOnEvent,
+    newEvent: startedOnEvent ? null : newEventFromPointer(event),
   };
   calendar.setPointerCapture(event.pointerId);
   track.classList.remove("sliding");
@@ -1544,6 +1561,18 @@ function finishDrag(event) {
   const newEvent = drag.newEvent;
   drag = null;
   const movement = Math.hypot(deltaX, deltaY);
+  if (!appMenu.hidden && movement < TAP_MOVE_THRESHOLD) {
+    resetTrack(track);
+    appMenu.hidden = true;
+    suppressNextCalendarClick();
+    return;
+  }
+
+  if (newEvent === null && movement < TAP_MOVE_THRESHOLD) {
+    resetTrack(track);
+    return;
+  }
+
   if (newEvent && movement < TAP_MOVE_THRESHOLD) {
     resetTrack(track);
     suppressNextCalendarClick();
@@ -1794,7 +1823,12 @@ function refreshTrackLayout() {
 
 function openNewEventFromClick(event) {
   if (suppressCalendarClick) return;
-  if (event.target.closest("button, input, select, textarea, dialog")) return;
+  if (event.target.closest("button, input, select, textarea, dialog, a")) return;
+  if (!appMenu.hidden) {
+    appMenu.hidden = true;
+    event.preventDefault();
+    return;
+  }
   const parsed = newEventFromPoint(event.clientX, event.clientY, event.target);
   if (!parsed) return;
   event.preventDefault();
@@ -1815,6 +1849,12 @@ function newEventFromPointer(event) {
 
 function newEventFromPoint(clientX, clientY, fallbackTarget) {
   const pointTarget = document.elementFromPoint(clientX, clientY);
+  if (
+    pointTarget?.closest(".single-day-header") ||
+    fallbackTarget?.closest(".single-day-header")
+  )
+    return null;
+
   const dayEl =
     pointTarget?.closest(".day, .month-day, .single-day") ||
     fallbackTarget?.closest(".day, .month-day, .single-day");
@@ -2206,6 +2246,10 @@ function holidaysForDays(days) {
       (year) => holidayCache.get(holidayCacheKey(holidayCountry, year)) || [],
     )
     .filter((entry) => visible.has(entry.date));
+}
+
+function holidaySearchUrl(name) {
+  return `https://www.google.com/search?q=${encodeURIComponent(name)}`;
 }
 
 function loadSelectedHolidayYears(options = {}) {
