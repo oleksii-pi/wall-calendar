@@ -1327,8 +1327,6 @@ function renderEventBar(entry, options = {}) {
     }
     openExistingEvent(entry);
   });
-  bar.style.background = eventBackground(entry);
-
   const timeText = formatTimeRange(entry);
   const eventText = formatEventBarText(entry);
   const label = options.compact
@@ -1338,10 +1336,54 @@ function renderEventBar(entry, options = {}) {
     : options.vertical && timeText
       ? `${timeText} ${eventText}`
       : eventText;
-  bar.textContent = label;
+  if (options.month) {
+    renderMonthEventBarContent(bar, timeText, eventText);
+  } else {
+    renderEventBarLabel(bar, label);
+  }
+  renderEventColorTicks(bar, entry);
   bar.title =
     options.month || options.vertical || !timeText ? label : `${timeText} ${label}`;
   return bar;
+}
+
+function renderEventBarLabel(bar, label) {
+  const text = document.createElement("span");
+  text.className = "event-bar-label";
+  text.textContent = label;
+  bar.append(text);
+}
+
+function renderMonthEventBarContent(bar, timeText, eventText) {
+  if (timeText) {
+    const time = document.createElement("span");
+    time.className = "month-event-line month-event-time";
+    time.textContent = timeText;
+    bar.append(time);
+  }
+
+  const title = document.createElement("span");
+  title.className = "month-event-line month-event-title";
+  title.textContent = eventText;
+  bar.append(title);
+}
+
+function renderEventColorTicks(bar, entry) {
+  const colors = eventTickColors(entry);
+  if (colors.length === 0) return;
+
+  const ticks = document.createElement("span");
+  ticks.className = "event-color-ticks";
+  ticks.setAttribute("aria-hidden", "true");
+
+  colors.forEach((color) => {
+    const tick = document.createElement("span");
+    tick.className = "event-color-tick";
+    tick.style.backgroundColor = color;
+    ticks.append(tick);
+  });
+
+  bar.append(ticks);
 }
 
 function formatEventBarText(entry) {
@@ -1351,19 +1393,9 @@ function formatEventBarText(entry) {
   return names ? `${entry.title} - ${names}` : entry.title;
 }
 
-function eventBackground(entry) {
+function eventTickColors(entry) {
   const eventMembers = eventMemberNames(entry);
-  if (eventMembers.length === 0) return EMPTY_EVENT_COLOR;
-  if (eventMembers.length === 1) return memberColor(eventMembers[0]);
-
-  const size = 100 / eventMembers.length;
-  const stops = eventMembers.flatMap((name, index) => {
-    const color = memberColor(name);
-    const start = index * size;
-    const end = (index + 1) * size;
-    return [`${color} ${start}%`, `${color} ${end}%`];
-  });
-  return `linear-gradient(to bottom, ${stops.join(", ")})`;
+  return eventMembers.map(memberColor);
 }
 
 function eventMemberNames(entry) {
