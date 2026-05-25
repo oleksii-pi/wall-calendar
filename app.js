@@ -144,9 +144,9 @@ const i18n = {
       deleteTitle: "Termin löschen?",
       editEvent: "Termin bearbeiten",
       eventText: "Text",
-      language: "Sprache",
+      language: "Sprache (nur auf diesem Gerät gespeichert)",
       membersEmpty: "In den Einstellungen verwaltet.",
-      membersInput: "Namen, durch Komma getrennt",
+      membersInput: "Namen (auf diesem Gerät und in der Cloud gespeichert)",
       menuDay: "Tag",
       menuMonth: "Monat",
       menuWeek: "Wochen",
@@ -155,7 +155,8 @@ const i18n = {
       push: "",
       save: "Speichern",
       settings: "Einstellungen",
-      settingsHint: "Daten bleiben in diesem Browser und in den Clouds.",
+      settingsHint:
+        "Kalenderdaten bleiben auf diesem Gerät und in der Cloud.",
       settingsHintLocal:
         "Data stays in this browser locally until you connect to the calendar by secret key.",
       resetSync: "Sync zurücksetzen",
@@ -173,7 +174,7 @@ const i18n = {
       allDay: "Ganztägig",
       type: "Typ",
       untitled: "Neuer Termin",
-      holidayCountry: "Feiertage",
+      holidayCountry: "Feiertage (nur auf diesem Gerät gespeichert)",
       noHolidayCountry: "Keine Feiertage",
     },
   },
@@ -225,9 +226,9 @@ const i18n = {
       deleteTitle: "Delete event?",
       editEvent: "Edit event",
       eventText: "Text",
-      language: "Language",
+      language: "Language (stored only on this device)",
       membersEmpty: "Managed in settings.",
-      membersInput: "Names, separated by comma",
+      membersInput: "Names (stored on this device and in the cloud)",
       menuDay: "Day",
       menuMonth: "Month",
       menuWeek: "Week",
@@ -236,7 +237,7 @@ const i18n = {
       push: "",
       save: "Save",
       settings: "Settings",
-      settingsHint: "Data stays in this browser and in the clouds.",
+      settingsHint: "Calendar data stays on this device and in the cloud",
       settingsHintLocal:
         "Data stays in this browser locally until you connect to the calendar by secret key.",
       resetSync: "Reset sync",
@@ -254,7 +255,7 @@ const i18n = {
       allDay: "Full day",
       type: "Type",
       untitled: "New event",
-      holidayCountry: "Public holidays",
+      holidayCountry: "Public holidays (stored only on this device)",
       noHolidayCountry: "No public holidays",
     },
   },
@@ -306,9 +307,9 @@ const i18n = {
       deleteTitle: "Видалити подію?",
       editEvent: "Редагувати подію",
       eventText: "Текст",
-      language: "Мова",
+      language: "Мова (зберігається лише на цьому пристрої)",
       membersEmpty: "Налаштовується в параметрах.",
-      membersInput: "Імена через кому",
+      membersInput: "Імена (зберігаються на цьому пристрої та в хмарі)",
       menuDay: "День",
       menuMonth: "Місяць",
       menuWeek: "Тиждень",
@@ -317,7 +318,8 @@ const i18n = {
       push: "",
       save: "Зберегти",
       settings: "Налаштування",
-      settingsHint: "Дані залишаються в цьому браузері та в хмарах.",
+      settingsHint:
+        "Дані календаря зберігаються на цьому пристрої та в хмарі.",
       settingsHintLocal:
         "Data stays in this browser locally until you connect to the calendar by secret key.",
       resetSync: "Скинути синхронізацію",
@@ -335,7 +337,7 @@ const i18n = {
       allDay: "Цілий день",
       type: "Тип",
       untitled: "Нова подія",
-      holidayCountry: "Державні свята",
+      holidayCountry: "Державні свята (зберігаються лише на цьому пристрої)",
       noHolidayCountry: "Без державних свят",
     },
   },
@@ -2108,8 +2110,8 @@ function parseMemberInput(value) {
   return [
     ...new Set(
       value
-        .split(",")
-        .map((name) => name.trim())
+        .split(/[,\s]+/u)
+        .map((name) => name.replace(/[^\p{L}]+/gu, ""))
         .filter(Boolean),
     ),
   ];
