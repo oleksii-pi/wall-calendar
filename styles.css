@@ -441,8 +441,7 @@ body {
   min-width: 0;
   padding: 0 3px 3px;
   border: 1px solid rgba(36, 48, 43, 0.1);
-  border-radius: 2px;
-  background: #f8faf7;
+  background: white;
   color: var(--ink);
   font: inherit;
   font-size: 11px;
@@ -477,7 +476,7 @@ body {
   position: relative;
   width: 100%;
   height: auto;
-  padding: 0 3px 3px;
+  padding: 0 0 2px 0;
 }
 
 .day-body-compact {
@@ -539,7 +538,7 @@ body {
   display: grid;
   grid-template-rows: auto minmax(0, 1fr);
   gap: 2px;
-  padding: 4px 4px 6px;
+  padding: 2px;
   overflow: hidden;
 }
 
@@ -568,7 +567,7 @@ body {
   flex: 0 0 auto;
   min-height: 16px;
   padding: 1px 3px 5px;
-  border-radius: 2px;
+  border-radius: 0;
   font-size: 11px;
   line-height: 1.2;
   white-space: normal;
@@ -936,7 +935,7 @@ button {
   align-items: center;
   justify-content: center;
   border: 1px solid var(--line);
-  border-radius: 6px;
+  border-radius: 2px;
   padding: 10px 14px;
   background: #fff;
   color: var(--ink);
