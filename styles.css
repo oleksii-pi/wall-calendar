@@ -476,7 +476,7 @@ body {
   position: relative;
   width: 100%;
   height: auto;
-  padding: 2px 0 2px 0;
+  padding: 2px;
 }
 
 .day-body-compact {
@@ -576,7 +576,7 @@ body {
 .month-event-line {
   display: block;
   min-width: 0;
-  overflow: hidden;
+  overflow: initial;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
