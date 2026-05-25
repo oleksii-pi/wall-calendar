@@ -440,7 +440,7 @@ body {
   justify-content: flex-start;
   min-width: 0;
   padding: 0 3px 3px;
-  border: 1px solid rgba(36, 48, 43, 0.1);
+  border: none;
   background: white;
   color: var(--ink);
   font: inherit;
@@ -476,7 +476,7 @@ body {
   position: relative;
   width: 100%;
   height: auto;
-  padding: 0 0 2px 0;
+  padding: 2px 0 2px 0;
 }
 
 .day-body-compact {
@@ -538,7 +538,7 @@ body {
   display: grid;
   grid-template-rows: auto minmax(0, 1fr);
   gap: 2px;
-  padding: 2px;
+  padding: 0;
   overflow: hidden;
 }
 
