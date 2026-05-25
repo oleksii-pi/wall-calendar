@@ -596,6 +596,7 @@ let snapSequence = 0;
 let pendingDeleteId = "";
 let pendingConfirmAction = "";
 let suppressCalendarClick = false;
+let suppressDocumentClick = false;
 let firebaseServices = null;
 let syncCalendarKey = localStorage.getItem(SYNC_SECRET_KEY) || "";
 let syncCalendarRef = null;
@@ -1316,8 +1317,10 @@ function renderEventBar(entry, options = {}) {
   const bar = document.createElement("button");
   bar.type = "button";
   bar.className = options.fullDay ? "event-bar fullday" : "event-bar";
+  bar.dataset.eventId = entry.id;
   if (options.month) bar.classList.add("month-event-bar");
   bar.addEventListener("click", (event) => {
+    event.stopPropagation();
     if (suppressCalendarClick) {
       event.preventDefault();
       return;
@@ -1336,7 +1339,8 @@ function renderEventBar(entry, options = {}) {
       ? `${timeText} ${eventText}`
       : eventText;
   bar.textContent = label;
-  bar.title = options.vertical || !timeText ? label : `${timeText} ${label}`;
+  bar.title =
+    options.month || options.vertical || !timeText ? label : `${timeText} ${label}`;
   return bar;
 }
 
@@ -1616,7 +1620,8 @@ function enableTitleEditing() {
 function startDrag(event) {
   if (!usesSwipeTrack()) return;
   if (event.pointerType === "mouse" && event.button !== 0) return;
-  const startedOnEvent = Boolean(event.target.closest(".event-bar"));
+  const eventBar = event.target.closest(".event-bar");
+  const startedOnEvent = Boolean(eventBar);
   if (
     event.target.closest("input, select, textarea, dialog, a") ||
     (event.target.closest("button") && !startedOnEvent)
@@ -1636,6 +1641,7 @@ function startDrag(event) {
     panelWidth,
     track,
     startedOnEvent,
+    eventId: eventBar?.dataset.eventId || "",
     newEvent: startedOnEvent ? null : newEventFromPointer(event),
   };
   calendar.setPointerCapture(event.pointerId);
@@ -1675,6 +1681,8 @@ function finishDrag(event) {
   const track = drag.track;
   const panelWidth = getPanelWidth(track) || drag.panelWidth;
   const newEvent = drag.newEvent;
+  const startedOnEvent = drag.startedOnEvent;
+  const existingEventId = drag.eventId;
   drag = null;
   const movement = Math.hypot(deltaX, deltaY);
   if (!appMenu.hidden && movement < TAP_MOVE_THRESHOLD) {
@@ -1686,13 +1694,21 @@ function finishDrag(event) {
 
   if (newEvent === null && movement < TAP_MOVE_THRESHOLD) {
     resetTrack(track);
+    if (startedOnEvent) {
+      const entry = events.find((item) => item.id === existingEventId);
+      if (entry) {
+        suppressNextClick();
+        appMenu.hidden = true;
+        openExistingEvent(entry, { focus: false });
+      }
+    }
     return;
   }
 
   if (newEvent && movement < TAP_MOVE_THRESHOLD) {
     resetTrack(track);
-    suppressNextCalendarClick();
-    openEventDialog(newEvent);
+    suppressNextClick();
+    openEventDialog(newEvent, { focus: false });
     return;
   }
 
@@ -1959,6 +1975,25 @@ function suppressNextCalendarClick() {
   }, 400);
 }
 
+function suppressNextClick() {
+  suppressNextCalendarClick();
+  suppressDocumentClick = true;
+  window.setTimeout(() => {
+    suppressDocumentClick = false;
+  }, 400);
+}
+
+document.addEventListener(
+  "click",
+  (event) => {
+    if (!suppressDocumentClick) return;
+    suppressDocumentClick = false;
+    event.preventDefault();
+    event.stopPropagation();
+  },
+  true,
+);
+
 function newEventFromPointer(event) {
   return newEventFromPoint(event.clientX, event.clientY, event.target);
 }
@@ -2059,17 +2094,17 @@ function minutesToTime(minute) {
   return `${String(Math.floor(normalized / 60)).padStart(2, "0")}:${String(normalized % 60).padStart(2, "0")}`;
 }
 
-function openEventDialog(parsed) {
+function openEventDialog(parsed, options = {}) {
   eventId.value = "";
   deleteEvent.hidden = true;
   eventDialogTitle.textContent = label("newEvent");
   document.querySelector("#saveEvent").textContent = label("add");
   fillEventForm(parsed);
   eventDialog.showModal();
-  eventDialogTitle.focus({ preventScroll: true });
+  settleEventDialogFocus(options);
 }
 
-function openExistingEvent(entry) {
+function openExistingEvent(entry, options = {}) {
   eventId.value = entry.id;
   deleteEvent.hidden = false;
   eventDialogTitle.textContent = label("editEvent");
@@ -2084,6 +2119,15 @@ function openExistingEvent(entry) {
     members: entry.members || [],
   });
   eventDialog.showModal();
+  settleEventDialogFocus(options);
+}
+
+function settleEventDialogFocus(options = {}) {
+  if (options.focus === false) {
+    document.activeElement?.blur();
+    return;
+  }
+
   eventDialogTitle.focus({ preventScroll: true });
 }
 
