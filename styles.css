@@ -562,22 +562,13 @@ body {
 }
 
 .month-event-bar {
-  flex-direction: column;
-  align-items: stretch;
+  align-items: center;
   flex: 0 0 auto;
   min-height: 16px;
   padding: 1px 3px 5px;
   border-radius: 0;
   font-size: 11px;
   line-height: 1.2;
-  white-space: normal;
-}
-
-.month-event-line {
-  display: block;
-  min-width: 0;
-  overflow: initial;
-  text-overflow: ellipsis;
   white-space: nowrap;
 }
 

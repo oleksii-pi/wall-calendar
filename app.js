@@ -1331,16 +1331,10 @@ function renderEventBar(entry, options = {}) {
   const eventText = formatEventBarText(entry);
   const label = options.compact
     ? entry.title
-    : options.month && timeText
-      ? `${timeText} ${eventText}`
     : options.vertical && timeText
       ? `${timeText} ${eventText}`
       : eventText;
-  if (options.month) {
-    renderMonthEventBarContent(bar, timeText, eventText);
-  } else {
-    renderEventBarLabel(bar, label);
-  }
+  renderEventBarLabel(bar, label);
   renderEventColorTicks(bar, entry);
   bar.title =
     options.month || options.vertical || !timeText ? label : `${timeText} ${label}`;
@@ -1352,20 +1346,6 @@ function renderEventBarLabel(bar, label) {
   text.className = "event-bar-label";
   text.textContent = label;
   bar.append(text);
-}
-
-function renderMonthEventBarContent(bar, timeText, eventText) {
-  if (timeText) {
-    const time = document.createElement("span");
-    time.className = "month-event-line month-event-time";
-    time.textContent = timeText;
-    bar.append(time);
-  }
-
-  const title = document.createElement("span");
-  title.className = "month-event-line month-event-title";
-  title.textContent = eventText;
-  bar.append(title);
 }
 
 function renderEventColorTicks(bar, entry) {
